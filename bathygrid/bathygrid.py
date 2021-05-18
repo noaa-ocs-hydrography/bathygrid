@@ -2,11 +2,11 @@ import os
 from datetime import datetime
 import numpy as np
 import xarray as xr
-from dask.array import Array as dask_array
+from dask.array import Array
 from typing import Union
 
-from grids import Grid
-from tile import Tile
+from bathygrid.grids import Grid
+from bathygrid.tile import Tile
 
 
 def create_folder(output_directory: str, fldrname: str):
@@ -77,7 +77,7 @@ class BathyGrid(Grid):
         self.point_data = None
 
         self.container = {}  # dict of container name, list of multibeam files
-        self.crs = None  # epsg code
+        self.epsg = None  # epsg code
         self.vertical_reference = None  # string identifier for the vertical reference
 
         self.min_grid_resolution = None
@@ -101,7 +101,7 @@ class BathyGrid(Grid):
             empty_struct[varname] = self.point_data[varname].values
         self.point_data = empty_struct
 
-    def _update_metadata(self, container_name: str = None, multibeam_file_list: list = None, crs: str = None,
+    def _update_metadata(self, container_name: str = None, multibeam_file_list: list = None, epsg: int = None,
                          vertical_reference: str = None):
         """
         Update the bathygrid metadata for the new data
@@ -113,7 +113,7 @@ class BathyGrid(Grid):
             dataset
         multibeam_file_list
             list of multibeam files that exist in the data to add to the grid
-        crs
+        epsg
             epsg (or proj4 string) for the coordinate system of the data.  Proj4 only shows up when there is no valid
             epsg
         vertical_reference
@@ -125,13 +125,13 @@ class BathyGrid(Grid):
         else:
             self.container[container_name] = ['Unknown']
 
-        if self.crs and (self.crs != crs):
-            raise ValueError('BathyGrid: Found existing coordinate system {}, new coordinate system {} must match'.format(self.crs,
-                                                                                                                            crs))
+        if self.epsg and (self.epsg != int(epsg)):
+            raise ValueError('BathyGrid: Found existing coordinate system {}, new coordinate system {} must match'.format(self.epsg,
+                                                                                                                          epsg))
         if self.vertical_reference and (self.vertical_reference != vertical_reference):
             raise ValueError('BathyGrid: Found existing vertical reference {}, new vertical reference {} must match'.format(self.vertical_reference,
-                                                                                                                              vertical_reference))
-        self.crs = crs
+                                                                                                                            vertical_reference))
+        self.epsg = int(epsg)
         self.vertical_reference = vertical_reference
 
     def _validate_input_data(self):
@@ -140,7 +140,7 @@ class BathyGrid(Grid):
         Numpy for performance reasons.
         """
 
-        if type(self.point_data) in [np.ndarray, dask_array]:
+        if type(self.point_data) in [np.ndarray, Array]:
             if not self.point_data.dtype.names:
                 raise ValueError('BathyGrid: numpy array provided for data, but no names were found, array must be a structured array')
             if 'x' not in self.point_data.dtype.names or 'y' not in self.point_data.dtype.names:
@@ -188,7 +188,7 @@ class BathyGrid(Grid):
                 self.tiles = np.full(self.tile_x_origin.shape, None, dtype=object)
             else:
                 new_tiles = np.full(self.tile_x_origin.shape, None, dtype=object)
-                new_tiles[self.existing_tile_mask] = self.tiles
+                new_tiles[self.existing_tile_mask] = self.tiles.ravel()
                 self.tiles = new_tiles
             self._add_points_to_tiles(container_name)
 
@@ -218,15 +218,13 @@ class BathyGrid(Grid):
                 point_mask = binnum == ul
                 pts = self.point_data[point_mask]
                 if flat_tiles[ul] is None:
-                    flat_tiles[ul] = Tile(self.min_grid_resolution, self.max_grid_resolution, tilexorigin[ul],
-                                          tileyorigin[ul], self.tile_size)
+                    flat_tiles[ul] = Tile(tilexorigin[ul], tileyorigin[ul], self.tile_size)
                 flat_tiles[ul].add_points(pts, container_name)
                 if flat_tiles[ul].is_empty:
                     flat_tiles[ul] = None
 
-    def add_points(self, data: Union[xr.Dataset, dask_array, np.ndarray], container_name: str,
-                   multibeam_file_list: list = None, crs: str = None, vertical_reference: str = None,
-                   max_grid_resolution: int = 128, min_grid_resolution: int = 1):
+    def add_points(self, data: Union[xr.Dataset, Array, np.ndarray], container_name: str,
+                   multibeam_file_list: list = None, crs: int = None, vertical_reference: str = None):
         """
         Add new points to the grid.  Build new tiles to encapsulate those points, or add the points to existing Tiles
         if they fall within existing tile boundaries.
@@ -245,23 +243,16 @@ class BathyGrid(Grid):
             epsg
         vertical_reference
             vertical reference of the data
-        max_grid_resolution
-            maximum allowable quad size before it splits
-        min_grid_resolution
-            minimum grid size allowable, will not split further
         """
 
-        self.min_grid_resolution = min_grid_resolution
-        self.max_grid_resolution = max_grid_resolution
-
-        if isinstance(data, (dask_array, xr.Dataset)):
+        if isinstance(data, (Array, xr.Dataset)):
             data = data.compute()
         self.point_data = data
         self._validate_input_data()
         self._update_metadata(container_name, multibeam_file_list, crs, vertical_reference)
         self._update_base_grid()
         self._update_tiles(container_name)
-        self.point_data = None
+        self.point_data = None  # points are in the tiles, clear this attribute to free up memory
 
     def remove_points(self, container_name: str = None):
         """
@@ -282,3 +273,5 @@ class BathyGrid(Grid):
                         tile.remove_container(container_name)
                         if tile.is_empty:
                             flat_tiles[flat_tiles == tile] = None
+            if self.is_empty:
+                self.tiles = None

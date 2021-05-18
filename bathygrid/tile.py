@@ -5,20 +5,21 @@ class Tile:
     """
     Bathygrid is composed of multiple Tiles.  Each Tile manages its own point data and gridding.
     """
-    def __init__(self, min_grid_resolution: float, max_grid_resolution: float, min_x: float, min_y: float, size: float):
+    def __init__(self, min_x: float, min_y: float, size: float):
         self.data = None
         self.container = None
         self.points_count = None
 
-        self.min_grid_resolution = min_grid_resolution
-        self.max_grid_resolution = max_grid_resolution
+        self.min_grid_resolution = None
+        self.max_grid_resolution = None
 
         self.min_x = min_x
         self.max_x = min_x + size
         self.min_y = min_y
         self.max_y = min_y + size
 
-        self.size = size
+        self.width = size
+        self.height = size
         self.name = f'{min_x}_{min_y}'
 
     @property
@@ -55,10 +56,3 @@ class Tile:
             self.container.pop(container)
             self.data = self.data[msk]
             self.points_count = self.data['x'].size
-
-
-class SingleResolutionTile(Tile):
-    def __init__(self, resolution: float, min_x: float, min_y: float, size: float):
-        super().__init__(resolution, resolution, min_x, min_y, size)
-
-    
