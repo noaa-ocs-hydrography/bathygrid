@@ -2,6 +2,9 @@ import numpy as np
 
 
 class Tile:
+    """
+    Bathygrid is composed of multiple Tiles.  Each Tile manages its own point data and gridding.
+    """
     def __init__(self, min_grid_resolution: float, max_grid_resolution: float, min_x: float, min_y: float, size: float):
         self.data = None
         self.container = None
@@ -20,6 +23,10 @@ class Tile:
 
     @property
     def is_empty(self):
+        """
+        Return True if the Tile has no points
+        """
+
         if not self.points_count:
             return True
         else:
@@ -51,5 +58,7 @@ class Tile:
 
 
 class SingleResolutionTile(Tile):
-    def __init__(self, id: str, resolution: float):
-        super().__init__(id, resolution, resolution)
+    def __init__(self, resolution: float, min_x: float, min_y: float, size: float):
+        super().__init__(resolution, resolution, min_x, min_y, size)
+
+    
