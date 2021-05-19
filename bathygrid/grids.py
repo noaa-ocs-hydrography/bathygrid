@@ -1,105 +1,88 @@
 import numpy as np
-from typing import Union
+from bathygrid.utilities import is_power_of_two
 
-
-def is_power_of_two(n: Union[int, float]):
-    """
-    Return True if number is a power of two, supports n>1 and n<1.
-
-    Parameters
-    ----------
-    n
-        number to check, can be float or int
-
-    Returns
-    -------
-    bool
-        number is power of two
-    """
-
-    if n > 1:
-        if n != int(n):
-            return False
-        n = int(n)
-        return (n != 0) and (n & (n - 1) == 0)
-    elif n == 1:
-        return True
-    elif n > 0:
-        return is_power_of_two(1/n)
-    else:
-        return False
-    
 
 class Grid:
-    def __init__(self, tile_size):
-        self.origin_x = 0
-        self.origin_y = 0
+    """
+    Base grid for the Tile and the BathyGrid.
+    """
+    def __init__(self):
         self.min_y = None
         self.min_x = None
         self.max_y = None
         self.max_x = None
 
-        self.tiles = None
+        self.cell_edges_x = None
+        self.cell_edges_y = None
 
-        self.existing_tile_index = None
-
-        self.tile_x_origin = None
-        self.tile_y_origin = None
-        self.tile_center_x = None
-        self.tile_center_y = None
-        self.tile_edges_x = None
-        self.tile_edges_y = None
-
-        self.existing_tile_mask = None
+        self.cells = None
 
         self.width = None
         self.height = None
-        self.maximum_tiles = None
-        self.number_of_tiles = None
-
-        self.tile_size = tile_size
-        if not is_power_of_two(self.tile_size):
-            raise ValueError('Grid size must be a power of two.')
 
     @property
     def is_empty(self):
-        if self.tiles is None:
+        if self.cells is None:
             return True
-        elif not self.tiles.any():
+        elif not self.cells.any():
             return True
         return False
+
+
+class BaseGrid(Grid):
+    def __init__(self, cell_size):
+        super().__init__()
+        self.origin_x = 0
+        self.origin_y = 0
+
+        self.data = None
+        self.container = {}  # dict of container name, list of multibeam files
+
+        self.cell_x_origin = None
+        self.cell_y_origin = None
+
+        self.existing_cell_index = None
+        self.existing_cell_mask = None
+
+        self.maximum_cells = None
+        self.number_of_cells = None
+
+        self.cell_size = cell_size
+        if not is_power_of_two(self.cell_size):
+            raise ValueError('Grid size must be a power of two.')
 
     def _build_grid(self):
         if self.min_y is None or self.min_x is None or self.max_y is None or self.max_x is None:
             raise ValueError('UtmGrid not initialized!')
 
-        nearest_lower_x = np.floor((self.min_x - self.origin_x) / self.tile_size) * self.tile_size
-        nearest_higher_x = np.ceil((self.max_x - self.origin_x) / self.tile_size) * self.tile_size
-        nearest_lower_y = np.floor((self.min_y - self.origin_y) / self.tile_size) * self.tile_size
-        nearest_higher_y = np.ceil((self.max_y - self.origin_y) / self.tile_size) * self.tile_size
+        nearest_lower_x = np.floor((self.min_x - self.origin_x) / self.cell_size) * self.cell_size
+        nearest_higher_x = np.ceil((self.max_x - self.origin_x) / self.cell_size) * self.cell_size
+        if nearest_higher_x == self.max_x:  # higher value cant be equal, our binning relies on it being less than
+            nearest_higher_x += self.cell_size
+        nearest_lower_y = np.floor((self.min_y - self.origin_y) / self.cell_size) * self.cell_size
+        nearest_higher_y = np.ceil((self.max_y - self.origin_y) / self.cell_size) * self.cell_size
+        if nearest_higher_y == self.max_y:
+            nearest_higher_y += self.cell_size
 
-        tx_origins = np.arange(nearest_lower_x, nearest_higher_x, self.tile_size)
-        ty_origins = np.arange(nearest_lower_y, nearest_higher_y, self.tile_size)
-        tile_x_origin, tile_y_origin = np.meshgrid(tx_origins, ty_origins)
+        tx_origins = np.arange(nearest_lower_x, nearest_higher_x, self.cell_size)
+        ty_origins = np.arange(nearest_lower_y, nearest_higher_y, self.cell_size)
+        cell_x_origin, cell_y_origin = np.meshgrid(tx_origins, ty_origins)
 
-        if not self.is_empty:  # we have existing tiles, so find where the existing tiles are in the new grid
-            self.existing_tile_mask = np.full(tile_x_origin.shape, False)
-            existing_tile_shape = self.tile_x_origin.shape
-            y_corner_coord = np.argwhere(tile_y_origin == self.tile_y_origin[0][0])[0][0]
-            x_corner_coord = np.argwhere(tile_x_origin == self.tile_x_origin[0][0])[0][1]
-            self.existing_tile_mask[y_corner_coord:y_corner_coord + existing_tile_shape[0], x_corner_coord:x_corner_coord + existing_tile_shape[1]] = True
+        if not self.is_empty:  # we have existing cells, so find where the existing cells are in the new grid
+            self.existing_cell_mask = np.full(cell_x_origin.shape, False)
+            existing_cell_shape = self.cell_x_origin.shape
+            y_corner_coord = np.argwhere(cell_y_origin == self.cell_y_origin[0][0])[0][0]
+            x_corner_coord = np.argwhere(cell_x_origin == self.cell_x_origin[0][0])[0][1]
+            self.existing_cell_mask[y_corner_coord:y_corner_coord + existing_cell_shape[0], x_corner_coord:x_corner_coord + existing_cell_shape[1]] = True
 
-        self.tile_x_origin, self.tile_y_origin = tile_x_origin, tile_y_origin
+        self.cell_x_origin, self.cell_y_origin = cell_x_origin, cell_y_origin
 
-        self.tile_center_x = self.tile_x_origin + self.tile_size / 2
-        self.tile_center_y = self.tile_y_origin + self.tile_size / 2
-
-        self.tile_edges_x = np.append(tx_origins, tx_origins[-1] + self.tile_size)
-        self.tile_edges_y = np.append(ty_origins, ty_origins[-1] + self.tile_size)
+        self.cell_edges_x = np.append(tx_origins, tx_origins[-1] + self.cell_size)
+        self.cell_edges_y = np.append(ty_origins, ty_origins[-1] + self.cell_size)
 
         self.width = nearest_higher_x - nearest_lower_x
         self.height = nearest_higher_y, nearest_lower_y
-        self.maximum_tiles = self.tile_x_origin.size
+        self.maximum_cells = self.cell_x_origin.size
 
     def _init_from_extents(self, min_y: float, min_x: float, max_y: float, max_x: float):
         self.min_y = min_y
@@ -115,3 +98,42 @@ class Grid:
         self.max_x = max(max_x, self.max_x)
         self._build_grid()
 
+
+class TileGrid(Grid):
+    def __init__(self, min_x: float, min_y: float, size: float):
+        super().__init__()
+        self.data = None
+
+        self.container = {}  # dict of container name, list of multibeam files
+
+        self.min_grid_resolution = None
+        self.max_grid_resolution = None
+
+        self.cells = {}
+        self.cell_edges_x = {}
+        self.cell_edges_y = {}
+
+        self._init_from_size(min_x, min_y, size)
+
+    @property
+    def is_empty(self):
+        if not self.points_count:
+            return True
+        return False
+
+    @property
+    def points_count(self):
+        if self.data is not None:
+            return int(self.data.size)
+        else:
+            return 0
+
+    def _init_from_size(self, min_x: float, min_y: float, size: float):
+        self.min_x = min_x
+        self.max_x = min_x + size
+        self.min_y = min_y
+        self.max_y = min_y + size
+
+        self.width = size
+        self.height = size
+        self.name = f'{min_x}_{min_y}'

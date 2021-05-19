@@ -33,8 +33,8 @@ data2['z'] = z
 
 
 def test_bathygrid_setup():
-    bg = BathyGrid(tile_size=1024)
-    assert bg.point_data is None
+    bg = BathyGrid(cell_size=1024)
+    assert bg.data is None
     assert bg.container == {}
     assert bg.epsg is None
     assert bg.vertical_reference is None
@@ -43,99 +43,109 @@ def test_bathygrid_setup():
 
 
 def test_bathygrid_add_points():
-    bg = BathyGrid(tile_size=1024)
+    bg = BathyGrid(cell_size=1024)
     bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
     assert not bg.is_empty
-    assert bg.point_data is None  # after adding we clear the point data to free memory
-    assert len(bg.tiles) == 6
-    assert len(bg.tiles[0]) == 5
-    for row in bg.tiles:
+    assert bg.data is None  # after adding we clear the point data to free memory
+    assert len(bg.cells) == 6
+    assert len(bg.cells[0]) == 5
+    for row in bg.cells:
         for til in row:
             assert isinstance(til, Tile)
     assert bg.container == {'test1': ['line1', 'line2']}
     assert bg.vertical_reference == 'waterline'
     assert bg.epsg == 26917
 
-    tile = bg.tiles[0][0]
+    tile = bg.cells[0][0]
     assert not tile.is_empty
-    assert tile.data.size == 20
-    assert tile.points_count == 20
+    assert tile.data.size == 22
+    assert tile.points_count == 22
     assert tile.width == 1024
     assert tile.height == 1024
-    assert tile.data['x'][0] == 100.0
+    assert tile.data['x'][0] == 0.0
     assert tile.data['y'][0] == 50000.0
-    assert tile.data['z'][0] == approx(20.0040)
+    assert tile.data['z'][0] == approx(20.000)
     assert tile.min_x == 0.0
     assert tile.max_x == 1024.0
     assert tile.min_y == 49152.0
     assert tile.max_y == 50176.0
     assert tile.name == '0.0_49152.0'
 
+    flat_tiles = bg.cells.ravel()
+    for tile in flat_tiles:
+        if tile:
+            points = tile.data
+            for point in points:
+                assert point['x'] >= tile.min_x
+                assert point['x'] < tile.max_x
+                assert point['y'] >= tile.min_y
+                assert point['y'] < tile.max_y
+
 
 def test_bathygrid_remove_points():
-    bg = BathyGrid(tile_size=1024)
+    bg = BathyGrid(cell_size=1024)
     bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.remove_points('test1')
 
-    assert bg.point_data is None
+    assert bg.data is None
     assert bg.container == {}
-    assert bg.tiles is None
+    assert bg.cells is None
 
 
 def test_bathygrid_add_multiple_sources():
-    bg = BathyGrid(tile_size=1024)
+    bg = BathyGrid(cell_size=1024)
     bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.add_points(data2, 'test2', ['line3', 'line4'], 26917, 'waterline')
 
     # test2 had no points for this tile, should match the other add points test
-    tile = bg.tiles[0][0]
+    tile = bg.cells[0][0]
     assert not tile.is_empty
-    assert tile.data.size == 20
-    assert tile.points_count == 20
+    assert tile.data.size == 22
+    assert tile.points_count == 22
     assert tile.width == 1024
     assert tile.height == 1024
-    assert tile.data['x'][0] == 100.0
+    assert tile.data['x'][0] == 0.0
     assert tile.data['y'][0] == 50000.0
-    assert tile.data['z'][0] == approx(20.0040)
+    assert tile.data['z'][0] == approx(20.000)
     assert tile.min_x == 0.0
     assert tile.max_x == 1024.0
     assert tile.min_y == 49152.0
     assert tile.max_y == 50176.0
     assert tile.name == '0.0_49152.0'
-    assert tile.container == {'test1': [0, 20]}
+    assert tile.container == {'test1': [0, 22]}
 
     # this tile has points from both containers
-    tile = bg.tiles[3][3]
+    tile = bg.cells[3][3]
     assert not tile.is_empty
-    assert tile.data.size == 120
-    assert tile.points_count == 120
+    assert tile.data.size == 200
+    assert tile.points_count == 200
     assert tile.width == 1024
     assert tile.height == 1024
     assert tile.data['x'][0] == 3100.0
-    assert tile.data['y'][0] == 50000.0
-    assert tile.data['z'][0] == approx(20.12405)
+    assert tile.data['y'][0] == 52300.0
+    assert tile.data['z'][0] == approx(24.725891)
     assert tile.min_x == 3072.0
     assert tile.max_x == 4096.0
     assert tile.min_y == 52224.0
     assert tile.max_y == 53248.0
     assert tile.name == '3072.0_52224.0'
-    assert tile.container == {'test1': [0, 20], 'test2': [20, 120]}
+    assert tile.container == {'test1': [0, 100], 'test2': [100, 200]}
 
     # removing points from this container will remove all test2 points from all tiles
     bg.remove_points('test2')
 
-    tile = bg.tiles[3][3]
+    tile = bg.cells[3][3]
     assert not tile.is_empty
-    assert tile.data.size == 20
-    assert tile.points_count == 20
+    assert tile.data.size == 100
+    assert tile.points_count == 100
     assert tile.width == 1024
     assert tile.height == 1024
     assert tile.data['x'][0] == 3100.0
-    assert tile.data['y'][0] == 50000.0
-    assert tile.data['z'][0] == approx(20.12405)
+    assert tile.data['y'][0] == 52300.0
+    assert tile.data['z'][0] == approx(24.725891)
     assert tile.min_x == 3072.0
     assert tile.max_x == 4096.0
     assert tile.min_y == 52224.0
     assert tile.max_y == 53248.0
     assert tile.name == '3072.0_52224.0'
-    assert tile.container == {'test1': [0, 20]}
+    assert tile.container == {'test1': [0, 100]}
