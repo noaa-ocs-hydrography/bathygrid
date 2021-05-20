@@ -1,7 +1,7 @@
 import numpy as np
 from pytest import approx
 
-from bathygrid.bathygrid import BathyGrid
+from bathygrid.bgrid import BathyGrid
 from bathygrid.tile import Tile
 
 
@@ -33,7 +33,7 @@ data2['z'] = z
 
 
 def test_bathygrid_setup():
-    bg = BathyGrid(cell_size=1024)
+    bg = BathyGrid(tile_size=1024)
     assert bg.data is None
     assert bg.container == {}
     assert bg.epsg is None
@@ -43,20 +43,20 @@ def test_bathygrid_setup():
 
 
 def test_bathygrid_add_points():
-    bg = BathyGrid(cell_size=1024)
+    bg = BathyGrid(tile_size=1024)
     bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
     assert not bg.is_empty
     assert bg.data is None  # after adding we clear the point data to free memory
-    assert len(bg.cells) == 6
-    assert len(bg.cells[0]) == 5
-    for row in bg.cells:
+    assert len(bg.tiles) == 6
+    assert len(bg.tiles[0]) == 5
+    for row in bg.tiles:
         for til in row:
             assert isinstance(til, Tile)
     assert bg.container == {'test1': ['line1', 'line2']}
     assert bg.vertical_reference == 'waterline'
     assert bg.epsg == 26917
 
-    tile = bg.cells[0][0]
+    tile = bg.tiles[0][0]
     assert not tile.is_empty
     assert tile.data.size == 22
     assert tile.points_count == 22
@@ -71,7 +71,7 @@ def test_bathygrid_add_points():
     assert tile.max_y == 50176.0
     assert tile.name == '0.0_49152.0'
 
-    flat_tiles = bg.cells.ravel()
+    flat_tiles = bg.tiles.ravel()
     for tile in flat_tiles:
         if tile:
             points = tile.data
@@ -83,22 +83,22 @@ def test_bathygrid_add_points():
 
 
 def test_bathygrid_remove_points():
-    bg = BathyGrid(cell_size=1024)
+    bg = BathyGrid(tile_size=1024)
     bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.remove_points('test1')
 
     assert bg.data is None
     assert bg.container == {}
-    assert bg.cells is None
+    assert bg.tiles is None
 
 
 def test_bathygrid_add_multiple_sources():
-    bg = BathyGrid(cell_size=1024)
+    bg = BathyGrid(tile_size=1024)
     bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.add_points(data2, 'test2', ['line3', 'line4'], 26917, 'waterline')
 
     # test2 had no points for this tile, should match the other add points test
-    tile = bg.cells[0][0]
+    tile = bg.tiles[0][0]
     assert not tile.is_empty
     assert tile.data.size == 22
     assert tile.points_count == 22
@@ -115,7 +115,7 @@ def test_bathygrid_add_multiple_sources():
     assert tile.container == {'test1': [0, 22]}
 
     # this tile has points from both containers
-    tile = bg.cells[3][3]
+    tile = bg.tiles[3][3]
     assert not tile.is_empty
     assert tile.data.size == 200
     assert tile.points_count == 200
@@ -134,7 +134,7 @@ def test_bathygrid_add_multiple_sources():
     # removing points from this container will remove all test2 points from all tiles
     bg.remove_points('test2')
 
-    tile = bg.cells[3][3]
+    tile = bg.tiles[3][3]
     assert not tile.is_empty
     assert tile.data.size == 100
     assert tile.points_count == 100

@@ -14,7 +14,7 @@ def trial_data():
 
 def trial_grid_mean_numba():
     depth, unc, cell_indices, grid, uncgrid = trial_data()
-    grid_mean(depth, unc, cell_indices, grid, uncgrid)
+    nb_grid_mean(depth, unc, cell_indices, grid, uncgrid)
 
 
 def trial_grid_mean_numpy():
@@ -23,10 +23,9 @@ def trial_grid_mean_numpy():
 
 
 if __name__ == '__main__':
-    import timeit
+    from time import perf_counter
 
-    print('Numpy: {}'.format(timeit.timeit('trial_grid_mean_numpy()', setup='from __main__ import trial_grid_mean_numpy',
-                                           number=10)))
-
-    print('Numba: {}'.format(timeit.timeit('trial_grid_mean_numba()', setup='from __main__ import trial_grid_mean_numba',
-                                           number=10)))
+    strt = perf_counter()
+    trial_grid_mean_numba()
+    end = perf_counter()
+    print('Numba: {}'.format(end - strt))

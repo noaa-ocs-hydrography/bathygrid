@@ -10,11 +10,11 @@ from bathygrid.utilities import bin2d_with_indices
 
 class BathyGrid(BaseGrid):
     """
-    Manage a rectangular grid of cells, each able to operate independently and in parallel.  BathyGrid automates the
+    Manage a rectangular grid of tiles, each able to operate independently and in parallel.  BathyGrid automates the
     creation and updating of each Tile, which happens under the hood when you add or remove points.
     """
-    def __init__(self, cell_size: int = 1024):
-        super().__init__(cell_size=cell_size)
+    def __init__(self, tile_size: int = 1024):
+        super().__init__(tile_size=tile_size)
 
         self.epsg = None  # epsg code
         self.vertical_reference = None  # string identifier for the vertical reference
@@ -98,10 +98,10 @@ class BathyGrid(BaseGrid):
     def _update_base_grid(self):
         """
         If the user adds new points, we need to make sure that we don't need to extend the grid in a direction.
-        Extending a grid will build a new existing_tile_index for where the old cells need to go in the new grid, see
-        _update_cells.
+        Extending a grid will build a new existing_tile_index for where the old tiles need to go in the new grid, see
+        _update_tiles.
         """
-        # extend the grid for new data or start a new grid if there are no existing cells
+        # extend the grid for new data or start a new grid if there are no existing tiles
         if self.data is not None:
             if self.is_empty:  # starting a new grid
                 self._init_from_extents(self.data['y'].min(), self.data['x'].min(), self.data['y'].max(),
@@ -110,10 +110,10 @@ class BathyGrid(BaseGrid):
                 self._update_extents(self.data['y'].min(), self.data['x'].min(), self.data['y'].max(),
                                      self.data['x'].max())
 
-    def _update_cells(self, container_name):
+    def _update_tiles(self, container_name):
         """
-        Pick up existing cells and put them in the correct place in the new grid.  Then add the new points to all of
-        the cells.
+        Pick up existing tiles and put them in the correct place in the new grid.  Then add the new points to all of
+        the tiles.
 
         Parameters
         ----------
@@ -123,22 +123,22 @@ class BathyGrid(BaseGrid):
         """
 
         if self.data is not None:
-            if self.is_empty:  # build empty list the same size as the cell attribute arrays
-                self.cells = np.full(self.cell_x_origin.shape, None, dtype=object)
+            if self.is_empty:  # build empty list the same size as the tile attribute arrays
+                self.tiles = np.full(self.tile_x_origin.shape, None, dtype=object)
             else:
-                new_cells = np.full(self.cell_x_origin.shape, None, dtype=object)
-                new_cells[self.existing_cell_mask] = self.cells.ravel()
-                self.cells = new_cells
-            self._add_points_to_cells(container_name)
+                new_tiles = np.full(self.tile_x_origin.shape, None, dtype=object)
+                new_tiles[self.existing_tile_mask] = self.tiles.ravel()
+                self.tiles = new_tiles
+            self._add_points_to_tiles(container_name)
 
-    def _add_points_to_cells(self, container_name):
+    def _add_points_to_tiles(self, container_name):
         """
-        Add new points to the cells.  Will run bin2d to figure out which points go in which cells.  If there is no cell
-        where the points go, will build a new cell and add the points to it.  Otherwise, adds the points to an existing
-        cell.  If the container_name is already in the cell (we have previously added these points), the cell will
+        Add new points to the tiles.  Will run bin2d to figure out which points go in which tiles.  If there is no tile
+        where the points go, will build a new tile and add the points to it.  Otherwise, adds the points to an existing
+        tile.  If the container_name is already in the tile (we have previously added these points), the tile will
         clear out old points and replace them with new.
 
-        If for some reason the resulting state of the cell is empty (no points in the cell) we replace the cell with None.
+        If for some reason the resulting state of the tile is empty (no points in the tile) we replace the tile with None.
 
         Parameters
         ----------
@@ -148,25 +148,25 @@ class BathyGrid(BaseGrid):
         """
 
         if self.data is not None:
-            binnum = bin2d_with_indices(self.data['x'], self.data['y'], self.cell_edges_x, self.cell_edges_y)
+            binnum = bin2d_with_indices(self.data['x'], self.data['y'], self.tile_edges_x, self.tile_edges_y)
             unique_locs = np.unique(binnum)
-            flat_cells = self.cells.ravel()
-            cellxorigin = self.cell_x_origin.ravel()
-            cellyorigin = self.cell_y_origin.ravel()
+            flat_tiles = self.tiles.ravel()
+            tilexorigin = self.tile_x_origin.ravel()
+            tileyorigin = self.tile_y_origin.ravel()
             for ul in unique_locs:
                 point_mask = binnum == ul
                 pts = self.data[point_mask]
-                if flat_cells[ul] is None:
-                    flat_cells[ul] = Tile(cellxorigin[ul], cellyorigin[ul], self.cell_size)
-                flat_cells[ul].add_points(pts, container_name)
-                if flat_cells[ul].is_empty:
-                    flat_cells[ul] = None
+                if flat_tiles[ul] is None:
+                    flat_tiles[ul] = Tile(tilexorigin[ul], tileyorigin[ul], self.tile_size)
+                flat_tiles[ul].add_points(pts, container_name)
+                if flat_tiles[ul].is_empty:
+                    flat_tiles[ul] = None
 
     def add_points(self, data: Union[xr.Dataset, Array, np.ndarray], container_name: str,
                    file_list: list = None, crs: int = None, vertical_reference: str = None):
         """
-        Add new points to the grid.  Build new cells to encapsulate those points, or add the points to existing cells
-        if they fall within existing cell boundaries.
+        Add new points to the grid.  Build new tiles to encapsulate those points, or add the points to existing tiles
+        if they fall within existing tile boundaries.
 
         Parameters
         ----------
@@ -190,12 +190,12 @@ class BathyGrid(BaseGrid):
         self._validate_input_data()
         self._update_metadata(container_name, file_list, crs, vertical_reference)
         self._update_base_grid()
-        self._update_cells(container_name)
-        self.data = None  # points are in the cells, clear this attribute to free up memory
+        self._update_tiles(container_name)
+        self.data = None  # points are in the tiles, clear this attribute to free up memory
 
     def remove_points(self, container_name: str = None):
         """
-        We go through all the existing cells and remove the points associated with container_name
+        We go through all the existing tiles and remove the points associated with container_name
 
         Parameters
         ----------
@@ -206,11 +206,11 @@ class BathyGrid(BaseGrid):
         if container_name in self.container:
             self.container.pop(container_name)
             if not self.is_empty:
-                flat_cells = self.cells.ravel()
-                for cell in flat_cells:
-                    if cell:
-                        cell.remove_points(container_name)
-                        if cell.is_empty:
-                            flat_cells[flat_cells == cell] = None
+                flat_tiles = self.tiles.ravel()
+                for tile in flat_tiles:
+                    if tile:
+                        tile.remove_points(container_name)
+                        if tile.is_empty:
+                            flat_tiles[flat_tiles == tile] = None
             if self.is_empty:
-                self.cells = None
+                self.tiles = None
