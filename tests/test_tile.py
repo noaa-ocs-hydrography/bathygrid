@@ -19,7 +19,7 @@ data['unc'] = unc
 
 
 def test_tile_setup():
-    til = Tile(0.0, 0.0, 1024)
+    til = SRTile(0.0, 0.0, 1024)
     assert til.is_empty
 
     til.add_points(data, 'test1')
@@ -46,7 +46,7 @@ def test_tile_setup():
 
 
 def test_tile_newgrid():
-    til = Tile(0.0, 0.0, 1024)
+    til = SRTile(0.0, 0.0, 1024)
     til.new_grid(8, 'mean')
 
     assert til.cells[8]['depth'].shape == (1024 / 8, 1024 / 8)
@@ -60,7 +60,7 @@ def test_tile_newgrid():
 
 
 def test_tile_addpoints():
-    til = Tile(0.0, 0.0, 1024)
+    til = SRTile(0.0, 0.0, 1024)
     til.add_points(data, 'test1')
 
     assert np.array_equal(data, til.data)
@@ -90,11 +90,12 @@ def test_tile_single_resolution():
                                                                      [1.485, 1.495, 1.505, 1.515, 1.525, 1.535, 1.545, 1.556],
                                                                      [1.566, 1.576, 1.586, 1.596, 1.606, 1.616, 1.626, 1.636]]))
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
-                                                             5, 6,  7,  8,  8,  9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
+                                                             5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,
                                                              24, 25, 26, 27, 27, 28, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36, 37,
                                                              38, 39, 40, 40, 41, 42, 43, 43, 44, 45, 46, 47, 48, 48, 49, 50, 51,
                                                              51, 52, 53, 54, 55, 56, 56, 57, 58, 59, 59, 60, 61, 62, 63]))
+
 
 
 def test_cell_indices_modification():

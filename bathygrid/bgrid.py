@@ -4,7 +4,7 @@ from dask.array import Array
 from typing import Union
 
 from bathygrid.grids import BaseGrid
-from bathygrid.tile import Tile
+from bathygrid.tile import SRTile
 from bathygrid.utilities import bin2d_with_indices
 
 
@@ -157,7 +157,7 @@ class BathyGrid(BaseGrid):
                 point_mask = binnum == ul
                 pts = self.data[point_mask]
                 if flat_tiles[ul] is None:
-                    flat_tiles[ul] = Tile(tilexorigin[ul], tileyorigin[ul], self.tile_size)
+                    flat_tiles[ul] = SRTile(tilexorigin[ul], tileyorigin[ul], self.tile_size)
                 flat_tiles[ul].add_points(pts, container_name)
                 if flat_tiles[ul].is_empty:
                     flat_tiles[ul] = None
