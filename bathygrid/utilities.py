@@ -87,6 +87,8 @@ def bin2d_with_indices(x: np.array, y: np.array, x_edges: np.array, y_edges: np.
         bins (is a one dimensional index)
     """
 
+    if x_edges.size == 2 and y_edges.size == 2:
+        return np.zeros(x.shape, dtype=int)
     xshape = x_edges.shape[0] - 1  # edges will be one longer than the number of tiles in this dimension
     yshape = y_edges.shape[0] - 1
     base_indices = np.arange(xshape * yshape).reshape(yshape, xshape)

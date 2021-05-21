@@ -17,10 +17,10 @@ class Grid:
 
 
 class BaseGrid(Grid):
-    def __init__(self, tile_size):
+    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024.0):
         super().__init__()
-        self.origin_x = 0
-        self.origin_y = 0
+        self.origin_x = min_x
+        self.origin_y = min_y
 
         self.data = None
         self.container = {}  # dict of container name, list of multibeam files
@@ -38,6 +38,7 @@ class BaseGrid(Grid):
         self.maximum_tiles = None
         self.number_of_tiles = None
 
+        self.can_grow = False
         self.tile_size = tile_size
         if not is_power_of_two(self.tile_size):
             raise ValueError('Grid size must be a power of two.')
@@ -54,20 +55,25 @@ class BaseGrid(Grid):
         if self.min_y is None or self.min_x is None or self.max_y is None or self.max_x is None:
             raise ValueError('UtmGrid not initialized!')
 
-        nearest_lower_x = np.floor((self.min_x - self.origin_x) / self.tile_size) * self.tile_size
-        nearest_higher_x = np.ceil((self.max_x - self.origin_x) / self.tile_size) * self.tile_size
-        if nearest_higher_x == self.max_x:  # higher value cant be equal, our binning relies on it being less than
-            nearest_higher_x += self.tile_size
-        nearest_lower_y = np.floor((self.min_y - self.origin_y) / self.tile_size) * self.tile_size
-        nearest_higher_y = np.ceil((self.max_y - self.origin_y) / self.tile_size) * self.tile_size
-        if nearest_higher_y == self.max_y:
-            nearest_higher_y += self.tile_size
+        if self.can_grow:
+            nearest_lower_x = np.floor((self.min_x - self.origin_x) / self.tile_size) * self.tile_size
+            nearest_higher_x = np.ceil((self.max_x - self.origin_x) / self.tile_size) * self.tile_size
+            nearest_lower_y = np.floor((self.min_y - self.origin_y) / self.tile_size) * self.tile_size
+            nearest_higher_y = np.ceil((self.max_y - self.origin_y) / self.tile_size) * self.tile_size
+            if nearest_higher_x == self.max_x:  # higher value cant be equal, our binning relies on it being less than
+                nearest_higher_x += self.tile_size
+            if nearest_higher_y == self.max_y:
+                nearest_higher_y += self.tile_size
+        else:
+            nearest_lower_x, nearest_higher_x = self.min_x, self.max_x
+            nearest_lower_y, nearest_higher_y = self.min_y, self.max_y
 
         tx_origins = np.arange(nearest_lower_x, nearest_higher_x, self.tile_size)
         ty_origins = np.arange(nearest_lower_y, nearest_higher_y, self.tile_size)
         tile_x_origin, tile_y_origin = np.meshgrid(tx_origins, ty_origins)
 
-        if not self.is_empty:  # we have existing tiles, so find where the existing tiles are in the new grid
+        if not self.is_empty and self.can_grow:
+            # we have existing tiles, so find where the existing tiles are in the new grid.  Only applies if the grid can grow
             self.existing_tile_mask = np.full(tile_x_origin.shape, False)
             existing_tile_shape = self.tile_x_origin.shape
             y_corner_coord = np.argwhere(tile_y_origin == self.tile_y_origin[0][0])[0][0]
