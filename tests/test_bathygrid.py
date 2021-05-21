@@ -159,5 +159,63 @@ def test_SRGrid_add_multiple_sources():
 
 
 def test_VRGridTile_add_points():
-    bg = VRGridTile(tile_size=1024)
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.is_empty
+    assert bg.data is None  # after adding we clear the point data to free memory
+    assert len(bg.tiles) == 6
+    assert len(bg.tiles[0]) == 5
+    for row in bg.tiles:
+        for til in row:
+            assert isinstance(til, BathyGrid)
+    assert bg.container == {'test1': ['line1', 'line2']}
+    assert bg.vertical_reference == 'waterline'
+    assert bg.epsg == 26917
+    assert bg.min_x == 0.0
+    assert bg.max_x == 5120.0
+    assert bg.min_y == 49152.0
+    assert bg.max_y == 55296.0
+    assert np.array_equal(bg.tile_edges_x, np.array([0.0, 1024.0, 2048.0, 3072.0, 4096.0, 5120.0]))
+    assert np.array_equal(bg.tile_edges_y, np.array([49152.0, 50176.0, 51200.0, 52224.0, 53248.0, 54272.0, 55296.0]))
+
+    child_bg = bg.tiles[0][0]
+    assert not child_bg.is_empty
+    assert not child_bg.data
+    assert len(child_bg.tiles) == 1024 / 128
+    assert len(child_bg.tiles[0]) == 1024 / 128
+    assert child_bg.tile_size == 128
+    assert child_bg.min_x == 0.0
+    assert child_bg.max_x == 1024.0
+    assert child_bg.min_y == 49152.0
+    assert child_bg.max_y == 50176.0
+    assert np.array_equal(child_bg.tile_edges_x, np.array([0.0, 128.0, 256.0, 384.0, 512.0, 640.0, 768.0, 896.0, 1024.0]))
+    assert np.array_equal(child_bg.tile_edges_y, np.array([49152.0, 49280.0, 49408.0, 49536.0, 49664.0, 49792.0, 49920.0, 50048.0, 50176.0]))
+
+    assert not child_bg.tiles[0, :].any()
+    assert not child_bg.tiles[1, :].any()
+    assert not child_bg.tiles[2, :].any()
+    assert not child_bg.tiles[3, :].any()
+    assert not child_bg.tiles[4, :].any()
+    assert not child_bg.tiles[5, :].any()
+    child_bg_tile = child_bg.tiles[6, 0]
+    assert child_bg_tile.points_count == 2
+    assert child_bg_tile.width == 128
+    assert child_bg_tile.height == 128
+    assert child_bg_tile.data['x'][0] == 0.0
+    assert child_bg_tile.data['y'][0] == 50000.0
+    assert child_bg_tile.data['z'][0] == approx(20.000)
+    assert child_bg_tile.min_x == 0.0
+    assert child_bg_tile.max_x == 128.0
+    assert child_bg_tile.min_y == 49920.0
+    assert child_bg_tile.max_y == 50048.0
+    assert child_bg_tile.name == '0.0_49920.0'
+
+    flat_tiles = child_bg.tiles.ravel()
+    for tile in flat_tiles:
+        if tile:
+            points = tile.data
+            for point in points:
+                assert point['x'] >= tile.min_x
+                assert point['x'] < tile.max_x
+                assert point['y'] >= tile.min_y
+                assert point['y'] < tile.max_y

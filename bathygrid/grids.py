@@ -51,10 +51,7 @@ class BaseGrid(Grid):
             return True
         return False
 
-    def _build_grid(self):
-        if self.min_y is None or self.min_x is None or self.max_y is None or self.max_x is None:
-            raise ValueError('UtmGrid not initialized!')
-
+    def _adjust_extents(self):
         if self.can_grow:
             nearest_lower_x = np.floor((self.min_x - self.origin_x) / self.tile_size) * self.tile_size
             nearest_higher_x = np.ceil((self.max_x - self.origin_x) / self.tile_size) * self.tile_size
@@ -64,12 +61,16 @@ class BaseGrid(Grid):
                 nearest_higher_x += self.tile_size
             if nearest_higher_y == self.max_y:
                 nearest_higher_y += self.tile_size
-        else:
-            nearest_lower_x, nearest_higher_x = self.min_x, self.max_x
-            nearest_lower_y, nearest_higher_y = self.min_y, self.max_y
+            self.min_x, self.min_y = nearest_lower_x, nearest_lower_y
+            self.max_x, self.max_y = nearest_higher_x, nearest_higher_y
 
-        tx_origins = np.arange(nearest_lower_x, nearest_higher_x, self.tile_size)
-        ty_origins = np.arange(nearest_lower_y, nearest_higher_y, self.tile_size)
+    def _build_grid(self):
+        if self.min_y is None or self.min_x is None or self.max_y is None or self.max_x is None:
+            raise ValueError('UtmGrid not initialized!')
+        self._adjust_extents()
+
+        tx_origins = np.arange(self.min_x, self.max_x, self.tile_size)
+        ty_origins = np.arange(self.min_y, self.max_y, self.tile_size)
         tile_x_origin, tile_y_origin = np.meshgrid(tx_origins, ty_origins)
 
         if not self.is_empty and self.can_grow:
@@ -85,8 +86,8 @@ class BaseGrid(Grid):
         self.tile_edges_x = np.append(tx_origins, tx_origins[-1] + self.tile_size)
         self.tile_edges_y = np.append(ty_origins, ty_origins[-1] + self.tile_size)
 
-        self.width = nearest_higher_x - nearest_lower_x
-        self.height = nearest_higher_y, nearest_lower_y
+        self.width = self.max_x - self.min_x
+        self.height = self.max_y - self.min_y
         self.maximum_tiles = self.tile_x_origin.size
 
     def _init_from_extents(self, min_y: float, min_x: float, max_y: float, max_x: float):

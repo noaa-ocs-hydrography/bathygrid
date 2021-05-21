@@ -12,6 +12,9 @@ class BathyGrid(BaseGrid):
     """
     Manage a rectangular grid of tiles, each able to operate independently and in parallel.  BathyGrid automates the
     creation and updating of each Tile, which happens under the hood when you add or remove points.
+
+    Used in the VRGridTile as the tiles of the master grid.  Each tile of the VRGridTile is a BathyGrid with tiles within
+    that grid.
     """
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0, tile_size: float = 1024.0,
                  set_extents_manually: bool = False):
@@ -33,6 +36,25 @@ class BathyGrid(BaseGrid):
         self.rev_layer_lookup = {'z': 'depth', 'tvu': 'vertical_uncertainty', 'thu': 'horizontal_uncertainty'}
 
         self.tile_class = SRTile
+
+    def _build_tile(self, tile_x_origin: float, tile_y_origin: float):
+        """
+        Default tile of the BathyGrid is just a simple SRTile
+
+        Parameters
+        ----------
+        tile_x_origin
+            x origin coordinate for the tile, in the same units as the BathyGrid
+        tile_y_origin
+            y origin coordinate for the tile, in the same units as the BathyGrid
+
+        Returns
+        -------
+        SRTile
+            empty SRTile for this origin / tile size
+        """
+
+        return SRTile(tile_x_origin, tile_y_origin, self.tile_size)
 
     def _convert_dataset(self):
         """
@@ -122,7 +144,7 @@ class BathyGrid(BaseGrid):
                 point_mask = binnum == ul
                 pts = self.data[point_mask]
                 if flat_tiles[ul] is None:
-                    flat_tiles[ul] = self.tile_class(tilexorigin[ul], tileyorigin[ul], self.tile_size)
+                    flat_tiles[ul] = self._build_tile(tilexorigin[ul], tileyorigin[ul])
                 flat_tiles[ul].add_points(pts, container_name)
                 if flat_tiles[ul].is_empty:
                     flat_tiles[ul] = None
@@ -181,6 +203,18 @@ class BathyGrid(BaseGrid):
                 self.tiles = None
 
     def grid(self, resolution: float, algorithm: str):
+        """
+        Gridding involves calling 'grid' on all child grids/tiles until you eventually call 'grid' on a Tile.  The Tiles
+        are the objects that actually contain the points / gridded data
+
+        Parameters
+        ----------
+        resolution
+            resolution of the gridded data in the Tiles
+        algorithm
+            algorithm to grid by
+        """
+
         flat_tiles = self.tiles.ravel()
         for tile in flat_tiles:
             if tile:
@@ -188,6 +222,10 @@ class BathyGrid(BaseGrid):
 
 
 class SRGrid(BathyGrid):
+    """
+    SRGrid is the basic implementation of the BathyGrid.  This class contains the metadata and other functions required
+    to build and maintain the BathyGrid
+    """
     def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024.0):
         super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size)
         self.tile_class = SRTile
@@ -265,40 +303,33 @@ class SRGrid(BathyGrid):
 
 
 class VRGridTile(SRGrid):
-    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: int = 1024, subtile_size: int = 128):
+    """
+    VRGridTile is a simple approach to variable resolution gridding.  We build a grid of BathyGrids, where each BathyGrid
+    has a certain number of tiles (each tile with size subtile_size).  Each of those tiles can have a different resolution
+    depending on depth.
+    """
+    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024, subtile_size: float = 128):
         super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size)
-        self.tile_class = BathyGrid
         self.can_grow = True
         self.subtile_size = subtile_size
 
-    def _add_points_to_tiles(self, container_name):
+    def _build_tile(self, tile_x_origin: float, tile_y_origin: float):
         """
-        Add new points to the tiles.  Will run bin2d to figure out which points go in which tiles.  If there is no tile
-        where the points go, will build a new tile and add the points to it.  Otherwise, adds the points to an existing
-        tile.  If the container_name is already in the tile (we have previously added these points), the tile will
-        clear out old points and replace them with new.
-
-        If for some reason the resulting state of the tile is empty (no points in the tile) we replace the tile with None.
+        For the VRGridTile class, the 'Tiles' are in fact BathyGrids, which contain their own tiles.  subtile_size controls
+        the size of the Tiles within this BathyGrid.
 
         Parameters
         ----------
-        container_name
-            the folder name of the converted data, equivalent to splitting the output_path variable in the kluster
-            dataset
-        """
+        tile_x_origin
+            x origin coordinate for the tile, in the same units as the BathyGrid
+        tile_y_origin
+            y origin coordinate for the tile, in the same units as the BathyGrid
 
-        if self.data is not None:
-            binnum = bin2d_with_indices(self.data['x'], self.data['y'], self.tile_edges_x, self.tile_edges_y)
-            unique_locs = np.unique(binnum)
-            flat_tiles = self.tiles.ravel()
-            tilexorigin = self.tile_x_origin.ravel()
-            tileyorigin = self.tile_y_origin.ravel()
-            for ul in unique_locs:
-                point_mask = binnum == ul
-                pts = self.data[point_mask]
-                if flat_tiles[ul] is None:
-                    flat_tiles[ul] = self.tile_class(min_x=tilexorigin[ul], min_y=tileyorigin[ul], max_x=tilexorigin[ul] + self.tile_size,
-                                                     max_y=tileyorigin[ul] + self.tile_size, tile_size=self.subtile_size, set_extents_manually=True)
-                flat_tiles[ul].add_points(pts, container_name)
-                if flat_tiles[ul].is_empty:
-                    flat_tiles[ul] = None
+        Returns
+        -------
+        BathyGrid
+            empty BathyGrid for this origin / tile size
+        """
+        return BathyGrid(min_x=tile_x_origin, min_y=tile_y_origin, max_x=tile_x_origin + self.tile_size,
+                         max_y=tile_y_origin + self.tile_size, tile_size=self.subtile_size,
+                         set_extents_manually=True)
