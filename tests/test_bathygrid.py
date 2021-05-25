@@ -35,8 +35,8 @@ data2 = np.empty(len(x), dtype=dtyp)
 data2['x'] = x
 data2['y'] = y
 data2['z'] = z
-data1['tvu'] = tvu
-data1['thu'] = thu
+data2['tvu'] = tvu
+data2['thu'] = thu
 
 
 def test_SRGrid_setup():
@@ -156,6 +156,59 @@ def test_SRGrid_add_multiple_sources():
     assert tile.max_y == 53248.0
     assert tile.name == '3072.0_52224.0'
     assert tile.container == {'test1': [0, 100]}
+
+
+def test_SRGrid_get_layer_by_name():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.is_empty
+    assert bg.no_grid
+
+    res = bg.grid()
+    assert not bg.no_grid
+    assert res == 1.0
+    assert bg.data is None  # after adding we clear the point data to free memory
+    dpth = bg.get_layer_by_name('depth')
+    thu = bg.get_layer_by_name('horizontal_uncertainty')
+    tvu = bg.get_layer_by_name('vertical_uncertainty')
+    assert dpth.size == thu.size == tvu.size == 31457280
+    assert np.count_nonzero(~np.isnan(dpth)) == np.count_nonzero(~np.isnan(thu)) == np.count_nonzero(~np.isnan(tvu)) == 2500
+    assert dpth[848, 0] == 20.0
+    assert thu[848, 0] == 0.5
+    assert tvu[848, 0] == 1.0
+
+    res = bg.grid(resolution=128, clear_existing=True)
+    assert res == 128.0
+    dpth = bg.get_layer_by_name('depth')
+    thu = bg.get_layer_by_name('horizontal_uncertainty')
+    tvu = bg.get_layer_by_name('vertical_uncertainty')
+    assert dpth.size == thu.size == tvu.size == 1920
+    assert np.count_nonzero(~np.isnan(dpth)) == np.count_nonzero(~np.isnan(thu)) == np.count_nonzero(~np.isnan(tvu)) == 1521
+    assert dpth[6, 0] == 20.002
+    assert thu[6, 0] == 0.5
+    assert tvu[6, 0] == 1.0
+
+
+def test_SRGrid_get_trimmed_layer():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.is_empty
+    assert bg.no_grid
+
+    res = bg.grid(resolution=128, clear_existing=True)
+    assert res == 128.0
+    dpth = bg.get_layer_by_name('depth')
+    dpth_trim, mins, maxs = bg.get_layer_trimmed('depth')
+
+    assert dpth.shape == (48, 40)
+    assert np.count_nonzero(~np.isnan(dpth)) == 1521
+    assert dpth.size == 1920
+
+    assert dpth_trim.shape == (39, 39)
+    assert np.count_nonzero(~np.isnan(dpth_trim)) == 1521  # has the same populated cell count, just less empty space
+    assert dpth_trim.size == 1521
+    assert mins == [6, 0]
+    assert maxs == [45, 39]
 
 
 def test_VRGridTile_add_points():

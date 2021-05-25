@@ -2,6 +2,58 @@ import os
 import numpy as np
 from datetime import datetime
 from typing import Union
+from dask.distributed import get_client, Client
+import psutil
+
+
+def dask_find_or_start_client(address: str = None, silent: bool = False):
+    """
+    Either start or return Dask client in local/networked cluster mode
+
+    Parameters
+    ----------
+    address
+        ip address for existing or desired new dask server instance
+    silent
+        whether or not to print messages
+
+    Returns
+    -------
+    dask.distributed.client.Client
+        Client instance representing Local Cluster/Networked Cluster operations
+    """
+
+    client = None
+    try:
+        if address is None:
+            client = get_client()
+            if not silent:
+                print('Using existing local cluster client...')
+        else:
+            client = get_client(address=address)
+            if not silent:
+                print('Using existing client on address {}...'.format(address))
+    except ValueError:  # no global client found and no address provided
+        logical_core_count = psutil.cpu_count(True)
+        mem_total_gb = psutil.virtual_memory().total / 1000000000
+        # currently trying to support >8 workers is a mem hog.  Limit to 8, maybe expose this in the gui somewhere
+
+        if mem_total_gb > 24:  # basic test to see if we have enough memory, using an approx necessary amount of memory
+            num_workers = min(logical_core_count, 8)
+        else:  # if you have less, just limit to 4 workers
+            num_workers = min(logical_core_count, 4)
+
+        if address is None:
+            if not silent:
+                print('Starting local cluster client...')
+            client = Client(n_workers=num_workers)
+        else:
+            if not silent:
+                print('Starting client on address {}...'.format(address))
+            client = Client(address=address, n_workers=num_workers)
+    if client is not None:
+        print(client)
+    return client
 
 
 def create_folder(output_directory: str, fldrname: str):

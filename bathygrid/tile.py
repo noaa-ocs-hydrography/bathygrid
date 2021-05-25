@@ -16,29 +16,11 @@ class Tile(TileGrid):
         self.cells = {}
         self.cell_edges_x = {}
         self.cell_edges_y = {}
-        self.min_grid_resolution = None
-        self.max_grid_resolution = None
 
     def clear_points(self):
         self.data = None
         self.container = {}  # dict of container name, list of multibeam fil
         self.cell_indices = {}
-
-    @property
-    def is_vr(self):
-        """
-        Return True if Tile is variable resolution, i.e. the min grid size/max grid size is a range
-
-        Returns
-        -------
-        bool
-            True if VR
-        """
-
-        if self.max_grid_resolution:
-            return self.max_grid_resolution != self.min_grid_resolution
-        else:
-            return False
 
 
 class SRTile(Tile):
@@ -76,6 +58,7 @@ class SRTile(Tile):
     def new_grid(self, resolution: float, algorithm: str, nodatavalue: float = np.nan):
         if not is_power_of_two(resolution):
             raise ValueError(f'Tile: Resolution must be a power of two, got {resolution}')
+        resolution = resolution
         grid_x = np.arange(self.min_x, self.max_x, resolution)
         grid_y = np.arange(self.min_y, self.max_y, resolution)
         self.cell_edges_x[resolution] = np.append(grid_x, grid_x[-1] + resolution)
@@ -95,9 +78,11 @@ class SRTile(Tile):
         self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
         self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
-    def grid(self, resolution: float, algorithm: str):
+    def grid(self, algorithm: str, resolution: float, clear_existing: bool = False):
         if not is_power_of_two(resolution):
             raise ValueError(f'Tile: Resolution must be a power of two, got {resolution}')
+        if clear_existing:
+            self.clear_grid()
 
         if resolution not in self.cells or algorithm != self.algorithm:
             self.algorithm = algorithm
@@ -112,6 +97,19 @@ class SRTile(Tile):
                                                                                self.cell_edges_x[resolution], self.cell_edges_y[resolution])
         if algorithm == 'mean':
             self._run_mean_grid(resolution)
+        return resolution
+
+    def get_layer_by_name(self, layer: str = 'depth', resolution: float = None):
+        if self.is_empty:
+            raise ValueError('Tile: Grid is empty, no layer "{}" found'.format(layer))
+        if not resolution and len(list(self.cells.keys())) > 1:
+            raise ValueError('Tile: you must specify a resolution to return layer data when multiple resolutions are found')
+        if resolution:
+            if resolution not in list(self.cells.keys()):
+                raise ValueError('Tile: resolution {} not found in Tile'.format(resolution))
+        else:
+            resolution = list(self.cells.keys())[0]
+        return self.cells[resolution][layer]
 
 
 class VRTile(Tile):

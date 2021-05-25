@@ -73,7 +73,7 @@ def test_tile_addpoints():
 def test_tile_single_resolution():
     til = SRTile(0.0, 0.0, 1024)
     til.add_points(data, 'test1')
-    til.grid(128.0, 'mean')
+    til.grid('mean', 128.0)
 
     assert til.cells[128.0]['depth'].shape == (1024 / 128, 1024 / 128)
     assert np.array_equal(til.cells[128.0]['depth'], np.array([[20.556, 20.707, 20.808, 20.96 , 21.111, 21.212, 21.313, 21.414],
@@ -112,7 +112,7 @@ def test_cell_indices_modification():
     til = SRTile(0.0, 0.0, 1024)
     til.add_points(data, 'test1')
     assert not til.cell_indices
-    til.grid(128.0, 'mean')
+    til.grid('mean', 128.0)
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,
@@ -128,7 +128,7 @@ def test_cell_indices_modification():
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]))
-    til.grid(128.0, 'mean')
+    til.grid('mean', 128.0)
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,
@@ -140,7 +140,7 @@ def test_cell_indices_modification():
 def test_cell_indices_append():
     til = SRTile(0.0, 0.0, 1024)
     til.add_points(data, 'test1')
-    til.grid(128.0, 'mean')
+    til.grid('mean', 128.0)
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,
@@ -160,7 +160,7 @@ def test_cell_indices_append():
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]))
-    til.grid(128.0, 'mean')
+    til.grid('mean', 128.0)
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,

@@ -104,6 +104,10 @@ class BaseGrid(Grid):
         self.max_x = max(max_x, self.max_x)
         self._build_grid()
 
+    def _tile_idx_to_row_col(self, tile_index: int):
+        cols, rows = self.tile_x_origin.shape
+        return divmod(tile_index, rows)
+
 
 class TileGrid(Grid):
     def __init__(self, min_x: float, min_y: float, size: float):
