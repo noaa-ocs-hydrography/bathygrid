@@ -101,12 +101,12 @@ class SRTile(Tile):
 
     def get_layer_by_name(self, layer: str = 'depth', resolution: float = None):
         if self.is_empty:
-            raise ValueError('Tile: Grid is empty, no layer "{}" found'.format(layer))
+            return None
         if not resolution and len(list(self.cells.keys())) > 1:
             raise ValueError('Tile: you must specify a resolution to return layer data when multiple resolutions are found')
         if resolution:
             if resolution not in list(self.cells.keys()):
-                raise ValueError('Tile: resolution {} not found in Tile'.format(resolution))
+                return None
         else:
             resolution = list(self.cells.keys())[0]
         return self.cells[resolution][layer]

@@ -38,6 +38,22 @@ data2['z'] = z
 data2['tvu'] = tvu
 data2['thu'] = thu
 
+x = np.arange(3000, 8000, 10, dtype=np.float64)
+y = np.arange(52000, 57000, 10, dtype=np.float64)
+x, y = np.meshgrid(x, y)
+x = x.ravel()
+y = y.ravel()
+z = np.linspace(500, 5000, num=x.size).astype(np.float32)
+tvu = np.linspace(1, 2, num=x.size).astype(np.float32)
+thu = np.linspace(0.5, 1, num=x.size).astype(np.float32)
+
+data3 = np.empty(len(x), dtype=dtyp)
+data3['x'] = x
+data3['y'] = y
+data3['z'] = z
+data3['tvu'] = tvu
+data3['thu'] = thu
+
 
 def test_SRGrid_setup():
     bg = SRGrid(tile_size=1024)
@@ -272,3 +288,35 @@ def test_VRGridTile_add_points():
                 assert point['x'] < tile.max_x
                 assert point['y'] >= tile.min_y
                 assert point['y'] < tile.max_y
+
+
+def test_VRGridTile_variable_rez_grid():
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(data3, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert np.array_equal(bg.resolutions, np.array([32.0, 64.0, 128.0]))
+
+    depth_layers = [bg.get_layer_by_name('depth', res) for res in bg.resolutions]
+    thu_layers = [bg.get_layer_by_name('horizontal_uncertainty', res) for res in bg.resolutions]
+    tvu_layers = [bg.get_layer_by_name('vertical_uncertainty', res) for res in bg.resolutions]
+    assert depth_layers[0].shape == thu_layers[0].shape == tvu_layers[0].shape == (192, 192)
+    assert np.count_nonzero(~np.isnan(depth_layers[0])) == np.count_nonzero(~np.isnan(thu_layers[0])) == np.count_nonzero(~np.isnan(tvu_layers[0])) == 1099
+    assert depth_layers[1].shape == thu_layers[1].shape == tvu_layers[1].shape == (96, 96)
+    assert np.count_nonzero(~np.isnan(depth_layers[1])) == np.count_nonzero(~np.isnan(thu_layers[1])) == np.count_nonzero(~np.isnan(tvu_layers[1])) == 1264
+    assert depth_layers[2].shape == thu_layers[2].shape == tvu_layers[2].shape == (48, 48)
+    assert np.count_nonzero(~np.isnan(depth_layers[2])) == np.count_nonzero(~np.isnan(thu_layers[2])) == np.count_nonzero(~np.isnan(tvu_layers[2])) == 1200
+
+    assert bg.tiles.shape == (6, 6)
+
+    assert np.array_equal(bg.tiles[0][0].resolutions, np.array([32.0]))
+    assert bg.tiles[0][0].tiles.shape == (8, 8)
+    assert bg.tiles[0][0].tiles[0][0] is None
+    assert bg.tiles[0][0].tiles[7][7].cells[32.0]['depth'][1][1] == 626.0
+    assert bg.tiles[0][0].tiles[7][7].cells[32.0]['horizontal_uncertainty'][1][1] == 0.514
+    assert bg.tiles[0][0].tiles[7][7].cells[32.0]['vertical_uncertainty'][1][1] == 1.028
+
+    assert np.array_equal(bg.tiles[3][3].resolutions, np.array([128.0]))
+    assert bg.tiles[3][3].tiles.shape == (8, 8)
+    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['depth'][0][0] == 3412.555
+    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['horizontal_uncertainty'][0][0] == 0.824
+    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['vertical_uncertainty'][0][0] == 1.647

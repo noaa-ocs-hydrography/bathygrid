@@ -32,7 +32,6 @@ class BaseGrid(Grid):
         self.tile_edges_x = None
         self.tile_edges_y = None
 
-        self.existing_tile_index = None
         self.existing_tile_mask = None
 
         self.maximum_tiles = None
@@ -115,9 +114,6 @@ class TileGrid(Grid):
         self.data = None
 
         self.container = {}  # dict of container name, list of multibeam files
-
-        self.min_grid_resolution = None
-        self.max_grid_resolution = None
 
         self.cells = {}
         self.cell_edges_x = {}

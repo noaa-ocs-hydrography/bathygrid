@@ -1,17 +1,25 @@
+import os
 import numpy as np
 import xarray as xr
 from dask.array import Array
 from dask.distributed import wait, progress
 from typing import Union
 import matplotlib.pyplot as plt
+import json
 
 from bathygrid.grids import BaseGrid
 from bathygrid.tile import SRTile
-from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client
+from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, create_folder
 
 
 depth_resolution_lookup = {20: 0.5, 40: 1.0, 60: 2.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 32.0, 1280: 64.0, 2560: 128.0,
                            5120: 256.0, 10240: 512.0, 20480: 1024.0}
+desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'container',
+                'tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'existing_tile_mask',
+                'maximum_tiles', 'number_of_tiles', 'can_grow', 'tile_size', 'mean_depth', 'epsg',
+                'vertical_reference', 'resolutions']
+numpy_to_list = ['tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'resolutions']
+float_to_str = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'mean_depth']
 
 
 class BathyGrid(BaseGrid):
@@ -38,9 +46,6 @@ class BathyGrid(BaseGrid):
         self.epsg = None  # epsg code
         self.vertical_reference = None  # string identifier for the vertical reference
         self.resolutions = []
-
-        self.min_grid_resolution = None
-        self.max_grid_resolution = None
 
         self.layer_lookup = {'depth': 'z', 'vertical_uncertainty': 'tvu', 'horizontal_uncertainty': 'thu'}
         self.rev_layer_lookup = {'z': 'depth', 'tvu': 'vertical_uncertainty', 'thu': 'horizontal_uncertainty'}
@@ -81,7 +86,7 @@ class BathyGrid(BaseGrid):
         if self.data is None or not self.data['z'].any():
             self.mean_depth = None
         else:
-            self.mean_depth = self.data['z'].mean()
+            self.mean_depth = np.round(self.data['z'].mean(), 3)
 
     def _calculate_resolution(self):
         """
@@ -99,7 +104,10 @@ class BathyGrid(BaseGrid):
         dpth_keys = list(depth_resolution_lookup.keys())
         # get next positive value in keys of resolution lookup
         range_index = np.argmax((np.array(dpth_keys) - self.mean_depth) > 0)
-        return depth_resolution_lookup[dpth_keys[range_index]]
+        calc_resolution = depth_resolution_lookup[dpth_keys[range_index]]
+        # ensure that resolution does not exceed the tile size for obvious reasons
+        clipped_rez = min(self.tile_size, calc_resolution)
+        return float(clipped_rez)
 
     def _build_tile(self, tile_x_origin: float, tile_y_origin: float):
         """
@@ -324,7 +332,9 @@ class BathyGrid(BaseGrid):
                 assert tile_cell_count.is_integer()
                 tile_cell_count = int(tile_cell_count)
                 data_col, data_row = col * tile_cell_count, row * tile_cell_count
-                data[data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = tile.get_layer_by_name(layer, resolution)
+                newdata = tile.get_layer_by_name(layer, resolution)
+                if newdata is not None:
+                    data[data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = newdata
         return data
 
     def get_layer_trimmed(self, layer: str = 'depth', resolution: float = None):
@@ -360,7 +370,7 @@ class BathyGrid(BaseGrid):
 
         return data[rmin:rmax, cmin:cmax], [rmin, cmin], [rmax, cmax]
 
-    def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool):
+    def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool):
         """
         Run the gridding without Dask, Tile after Tile.
 
@@ -372,17 +382,22 @@ class BathyGrid(BaseGrid):
             algorithm to grid by
         clear_existing
             if True, will clear out any existing grids before generating this one
+        auto_resolution
+            if True and the tile type supports it, allow the tile to auto calculate the appropriate resolution
         """
 
         self.resolutions = []
         for tile in self.tiles.flat:
             if tile:
-                resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing)
+                if isinstance(tile, BathyGrid) and auto_resolution:
+                    resolution = tile.grid(algorithm, None, clear_existing=clear_existing)
+                else:
+                    resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing)
                 if resolution not in self.resolutions:
                     self.resolutions.append(resolution)
         self.resolutions = np.sort(np.unique(self.resolutions))
 
-    def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool):
+    def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool):
         """
         Use Dask to submit the tiles in parallel to the cluster for processing.  Probably should think up a more
         intelligent way to do this than sending around the whole Tile obejct.  That object has a bunch of other stuff
@@ -396,6 +411,8 @@ class BathyGrid(BaseGrid):
             algorithm to grid by
         clear_existing
             if True, will clear out any existing grids before generating this one
+        auto_resolution
+            if True and the tile type supports it, allow the tile to auto calculate the appropriate resolution
         """
 
         if not self.client:
@@ -411,7 +428,7 @@ class BathyGrid(BaseGrid):
         chunk_index = 0
         for tile in self.tiles.flat:
             if tile:
-                data_for_workers.append([tile, algorithm, resolution, clear_existing])
+                data_for_workers.append([tile, algorithm, resolution, clear_existing, auto_resolution])
                 chunk_index += 1
                 if chunk_index == chunks_at_a_time:
                     print('processing surface: group {} out of {}'.format(cur_run, total_runs))
@@ -447,17 +464,21 @@ class BathyGrid(BaseGrid):
             algorithm to grid by
         clear_existing
             if True, will clear out any existing grids before generating this one
+        use_dask
+            if True, will start a dask LocalCluster instance and perform the gridding in parallel
         """
 
         if self.is_empty:
             raise ValueError('BathyGrid: Grid is empty, no points have been added')
+        auto_resolution = False
         if resolution is None:
+            auto_resolution = True
             resolution = self._calculate_resolution()
         if use_dask:
-            self._grid_parallel(algorithm, resolution, clear_existing)
+            self._grid_parallel(algorithm, resolution, clear_existing, auto_resolution=auto_resolution)
         else:
-            self._grid_regular(algorithm, resolution, clear_existing)
-        return resolution
+            self._grid_regular(algorithm, resolution, clear_existing, auto_resolution=auto_resolution)
+        return self.resolutions
 
     def plot(self, layer: str = 'depth', resolution: float = None):
         """
@@ -474,12 +495,15 @@ class BathyGrid(BaseGrid):
         if self.no_grid:
             raise ValueError('BathyGrid: Grid is empty, gridding has not been run yet.')
         if not resolution:
-            if len(self.resolutions) > 1:
-                raise ValueError('BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
-            resolution = self.resolutions[0]
-        data = self.get_layer_by_name(layer, resolution)
-        plt.imshow(data, origin='lower')
-        plt.title('{}_{}'.format(layer, resolution))
+            resolution = self.resolutions
+        else:
+            resolution = [resolution]
+
+        for res in resolution:
+            fig = plt.figure()
+            data = self.get_layer_by_name(layer, res)
+            plt.imshow(data, origin='lower')
+            plt.title('{}_{}'.format(layer, res))
 
     def return_layer_names(self):
         """
@@ -556,7 +580,39 @@ class BathyGrid(BaseGrid):
         return x, y, surf, valid_nodes, new_mins, new_maxs
 
 
-class SRGrid(BathyGrid):
+class NumpyGrid(BathyGrid):
+    def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
+                 tile_size: float = 1024.0, set_extents_manually: bool = False):
+        super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
+                         set_extents_manually=set_extents_manually)
+
+    def _save_bathygrid_metadata(self, folderpath):
+        if not os.path.exists(folderpath):
+            raise EnvironmentError('Unable to save pickle file to {}, does not exist'.format(folderpath))
+        fileout = os.path.join(folderpath, 'metadata.json')
+        data = {ky: self.__getattribute__(ky) for ky in desired_keys}
+        for ky in numpy_to_list:
+            data[ky] = data[ky].tolist()
+        for ky in float_to_str:
+            data[ky] = str(data[ky])
+        with open(fileout, 'w') as fout:
+            json.dump(data, fout, indent=4)
+
+    def _load_bathygrid_metadata(self, folderpath):
+        if not os.path.exists(folderpath):
+            raise EnvironmentError('Unable to save pickle file to {}, does not exist'.format(folderpath))
+        fileout = os.path.join(folderpath, 'metadata.json')
+        with open(fileout, 'r') as fout:
+            data = json.load(fout)
+        for ky in numpy_to_list:
+            data[ky] = np.array(data[ky])
+        for ky in float_to_str:
+            data[ky] = float(data[ky])
+        for ky in data:
+            self.__setattr__(ky, data[ky])
+
+
+class SRGrid(NumpyGrid):
     """
     SRGrid is the basic implementation of the BathyGrid.  This class contains the metadata and other functions required
     to build and maintain the BathyGrid
@@ -635,6 +691,9 @@ class SRGrid(BathyGrid):
         else:
             raise ValueError('QuadTree: numpy structured array or dask array with "x" and "y" as variable must be provided')
 
+    def save(self, folderpath: str):
+        folderpath = create_folder(folderpath, 'grid')
+
 
 class VRGridTile(SRGrid):
     """
@@ -665,12 +724,15 @@ class VRGridTile(SRGrid):
         BathyGrid
             empty BathyGrid for this origin / tile size
         """
-        return BathyGrid(min_x=tile_x_origin, min_y=tile_y_origin, max_x=tile_x_origin + self.tile_size,
+        return NumpyGrid(min_x=tile_x_origin, min_y=tile_y_origin, max_x=tile_x_origin + self.tile_size,
                          max_y=tile_y_origin + self.tile_size, tile_size=self.subtile_size,
                          set_extents_manually=True)
 
 
 def _gridding_parallel(data_blob: list):
-    tile, algorithm, resolution, clear_existing = data_blob
-    resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing)
+    tile, algorithm, resolution, clear_existing, auto_resolution = data_blob
+    if isinstance(tile, BathyGrid) and auto_resolution:
+        resolution = tile.grid(algorithm, None, clear_existing=clear_existing)
+    else:
+        resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing)
     return resolution, tile
