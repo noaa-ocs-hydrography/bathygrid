@@ -2,6 +2,7 @@ import numpy as np
 from pytest import approx
 
 from bathygrid.bgrid import *
+from bathygrid.maingrid import *
 from bathygrid.tile import Tile
 
 
@@ -61,8 +62,6 @@ def test_SRGrid_setup():
     assert bg.container == {}
     assert bg.epsg is None
     assert bg.vertical_reference is None
-    assert bg.min_grid_resolution is None
-    assert bg.max_grid_resolution is None
 
 
 def test_SRGrid_add_points():
@@ -92,7 +91,7 @@ def test_SRGrid_add_points():
     assert tile.max_x == 1024.0
     assert tile.min_y == 49152.0
     assert tile.max_y == 50176.0
-    assert tile.name == '0.0_49152.0'
+    assert tile.name == '0_0'
 
     flat_tiles = bg.tiles.ravel()
     for tile in flat_tiles:
@@ -134,7 +133,7 @@ def test_SRGrid_add_multiple_sources():
     assert tile.max_x == 1024.0
     assert tile.min_y == 49152.0
     assert tile.max_y == 50176.0
-    assert tile.name == '0.0_49152.0'
+    assert tile.name == '0_0'
     assert tile.container == {'test1': [0, 22]}
 
     # this tile has points from both containers
@@ -151,7 +150,7 @@ def test_SRGrid_add_multiple_sources():
     assert tile.max_x == 4096.0
     assert tile.min_y == 52224.0
     assert tile.max_y == 53248.0
-    assert tile.name == '3072.0_52224.0'
+    assert tile.name == '3_3'
     assert tile.container == {'test1': [0, 100], 'test2': [100, 200]}
 
     # removing points from this container will remove all test2 points from all tiles
@@ -170,7 +169,7 @@ def test_SRGrid_add_multiple_sources():
     assert tile.max_x == 4096.0
     assert tile.min_y == 52224.0
     assert tile.max_y == 53248.0
-    assert tile.name == '3072.0_52224.0'
+    assert tile.name == '3_3'
     assert tile.container == {'test1': [0, 100]}
 
 
@@ -277,7 +276,7 @@ def test_VRGridTile_add_points():
     assert child_bg_tile.max_x == 128.0
     assert child_bg_tile.min_y == 49920.0
     assert child_bg_tile.max_y == 50048.0
-    assert child_bg_tile.name == '0.0_49920.0'
+    assert child_bg_tile.name == '6_0'
 
     flat_tiles = child_bg.tiles.ravel()
     for tile in flat_tiles:
@@ -320,3 +319,24 @@ def test_VRGridTile_variable_rez_grid():
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['depth'][0][0] == 3412.555
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['horizontal_uncertainty'][0][0] == 0.824
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['vertical_uncertainty'][0][0] == 1.647
+
+
+def test_grid_names():
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert bg.name == 'VRGridTile_Root'
+    assert isinstance(bg.tiles[0][0], BathyGrid)
+    assert bg.tiles[0][0].name == '0_0'
+    assert bg.tiles[3][3].name == '3_3'
+    assert bg.tiles[2][4].name == '2_4'
+    assert isinstance(bg.tiles[0][0].tiles[6][6], Tile)
+    assert bg.tiles[0][0].tiles[6][6].name == '6_6'
+    assert bg.tiles[0][0].tiles[7][3].name == '7_3'
+
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(data1, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert bg.name == 'SRGrid_Root'
+    assert isinstance(bg.tiles[0][0], Tile)
+    assert bg.tiles[0][0].name == '0_0'
+    assert bg.tiles[3][3].name == '3_3'
+    assert bg.tiles[2][4].name == '2_4'

@@ -5,21 +5,14 @@ from dask.array import Array
 from dask.distributed import wait, progress
 from typing import Union
 import matplotlib.pyplot as plt
-import json
 
 from bathygrid.grids import BaseGrid
-from bathygrid.tile import SRTile
-from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, create_folder
+from bathygrid.tile import SRTile, Tile
+from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar
 
 
 depth_resolution_lookup = {20: 0.5, 40: 1.0, 60: 2.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 32.0, 1280: 64.0, 2560: 128.0,
                            5120: 256.0, 10240: 512.0, 20480: 1024.0}
-desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'container',
-                'tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'existing_tile_mask',
-                'maximum_tiles', 'number_of_tiles', 'can_grow', 'tile_size', 'mean_depth', 'epsg',
-                'vertical_reference', 'resolutions']
-numpy_to_list = ['tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'resolutions']
-float_to_str = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'mean_depth']
 
 
 class BathyGrid(BaseGrid):
@@ -50,6 +43,11 @@ class BathyGrid(BaseGrid):
         self.layer_lookup = {'depth': 'z', 'vertical_uncertainty': 'tvu', 'horizontal_uncertainty': 'thu'}
         self.rev_layer_lookup = {'z': 'depth', 'tvu': 'vertical_uncertainty', 'thu': 'horizontal_uncertainty'}
 
+        self.name = ''
+        self.output_folder = ''
+        self.subtile_size = 0
+        self.sub_type = 'tile'
+        self.storage_type = 'numpy'
         self.client = None
 
     @property
@@ -77,6 +75,18 @@ class BathyGrid(BaseGrid):
                     return False
                 else:
                     return True
+
+    @property
+    def has_tiles(self):
+        """
+        BathyGrids can either contain more BathyGrids or contain Tiles with point/gridded data.  This check determines
+        whether or not this instance contains Tiles
+        """
+        for tile in self.tiles.flat:
+            if tile:
+                if isinstance(tile, Tile):
+                    return True
+        return False
 
     def _update_mean_depth(self):
         """
@@ -191,7 +201,7 @@ class BathyGrid(BaseGrid):
             else:  # grid can't grow, so we just leave existing tiles where they are
                 pass
 
-    def _update_tiles(self, container_name):
+    def _update_tiles(self, container_name: str, progress_bar: bool):
         """
         Pick up existing tiles and put them in the correct place in the new grid.  Then add the new points to all of
         the tiles.
@@ -201,6 +211,8 @@ class BathyGrid(BaseGrid):
         container_name
             the folder name of the converted data, equivalent to splitting the output_path variable in the kluster
             dataset
+        progress_bar
+            if True, display a progress bar
         """
 
         if self.data is not None:
@@ -212,9 +224,9 @@ class BathyGrid(BaseGrid):
                 self.tiles = new_tiles
             else:  # grid can't grow, so we just leave existing tiles where they are
                 pass
-            self._add_points_to_tiles(container_name)
+            self._add_points_to_tiles(container_name, progress_bar)
 
-    def _add_points_to_tiles(self, container_name):
+    def _add_points_to_tiles(self, container_name: str, progress_bar: bool):
         """
         Add new points to the tiles.  Will run bin2d to figure out which points go in which tiles.  If there is no tile
         where the points go, will build a new tile and add the points to it.  Otherwise, adds the points to an existing
@@ -228,6 +240,8 @@ class BathyGrid(BaseGrid):
         container_name
             the folder name of the converted data, equivalent to splitting the output_path variable in the kluster
             dataset
+        progress_bar
+            if True, display a progress bar
         """
 
         if self.data is not None:
@@ -236,17 +250,24 @@ class BathyGrid(BaseGrid):
             flat_tiles = self.tiles.ravel()
             tilexorigin = self.tile_x_origin.ravel()
             tileyorigin = self.tile_y_origin.ravel()
-            for ul in unique_locs:
+            if progress_bar:
+                print_progress_bar(0, len(unique_locs))
+            for cnt, ul in enumerate(unique_locs):
+                if progress_bar:
+                    print_progress_bar(cnt + 1, len(unique_locs))
                 point_mask = binnum == ul
                 pts = self.data[point_mask]
                 if flat_tiles[ul] is None:
                     flat_tiles[ul] = self._build_tile(tilexorigin[ul], tileyorigin[ul])
-                flat_tiles[ul].add_points(pts, container_name)
+                    tile_row, tile_col = self._tile_idx_to_row_col(ul)
+                    flat_tiles[ul].name = '{}_{}'.format(tile_row, tile_col)
+                flat_tiles[ul].add_points(pts, container_name, progress_bar=False)
                 if flat_tiles[ul].is_empty:
                     flat_tiles[ul] = None
+            self.number_of_tiles = np.count_nonzero(self.tiles != None)
 
     def add_points(self, data: Union[xr.Dataset, Array, np.ndarray], container_name: str, file_list: list = None,
-                   crs: int = None, vertical_reference: str = None):
+                   crs: int = None, vertical_reference: str = None, progress_bar: bool = True):
         """
         Add new points to the grid.  Build new tiles to encapsulate those points, or add the points to existing tiles
         if they fall within existing tile boundaries.
@@ -265,6 +286,8 @@ class BathyGrid(BaseGrid):
             epsg
         vertical_reference
             vertical reference of the data
+        progress_bar
+            if True, display a progress bar
         """
 
         if isinstance(data, (Array, xr.Dataset)):
@@ -273,11 +296,11 @@ class BathyGrid(BaseGrid):
         self._validate_input_data()
         self._update_metadata(container_name, file_list, crs, vertical_reference)
         self._update_base_grid()
-        self._update_tiles(container_name)
+        self._update_tiles(container_name, progress_bar)
         self._update_mean_depth()
         self.data = None  # points are in the tiles, clear this attribute to free up memory
 
-    def remove_points(self, container_name: str = None):
+    def remove_points(self, container_name: str = None, progress_bar: bool = True):
         """
         We go through all the existing tiles and remove the points associated with container_name
 
@@ -286,15 +309,21 @@ class BathyGrid(BaseGrid):
         container_name
             the folder name of the converted data, equivalent to splitting the output_path variable in the kluster
             dataset
+        progress_bar
+            if True, display a progress bar
         """
 
         if container_name in self.container:
             self.container.pop(container_name)
             if not self.is_empty:
                 flat_tiles = self.tiles.ravel()
-                for tile in flat_tiles:
+                if progress_bar:
+                    print_progress_bar(0, len(flat_tiles))
+                for cnt, tile in enumerate(flat_tiles):
+                    if progress_bar:
+                        print_progress_bar(cnt + 1, len(flat_tiles))
                     if tile:
-                        tile.remove_points(container_name)
+                        tile.remove_points(container_name, progress_bar=False)
                         if tile.is_empty:
                             flat_tiles[flat_tiles == tile] = None
             if self.is_empty:
@@ -370,7 +399,8 @@ class BathyGrid(BaseGrid):
 
         return data[rmin:rmax, cmin:cmax], [rmin, cmin], [rmax, cmax]
 
-    def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool):
+    def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,
+                      progress_bar: bool = True):
         """
         Run the gridding without Dask, Tile after Tile.
 
@@ -384,20 +414,27 @@ class BathyGrid(BaseGrid):
             if True, will clear out any existing grids before generating this one
         auto_resolution
             if True and the tile type supports it, allow the tile to auto calculate the appropriate resolution
+        progress_bar
+            if True, display a progress bar
         """
 
         self.resolutions = []
-        for tile in self.tiles.flat:
+        if progress_bar:
+            print_progress_bar(0, self.tiles.size)
+        for cnt, tile in enumerate(self.tiles.flat):
+            if progress_bar:
+                print_progress_bar(cnt + 1, self.tiles.size)
             if tile:
                 if isinstance(tile, BathyGrid) and auto_resolution:
-                    resolution = tile.grid(algorithm, None, clear_existing=clear_existing)
+                    resolution = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
                 else:
-                    resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing)
+                    resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
                 if resolution not in self.resolutions:
                     self.resolutions.append(resolution)
         self.resolutions = np.sort(np.unique(self.resolutions))
 
-    def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool):
+    def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,
+                       progress_bar: bool = True):
         """
         Use Dask to submit the tiles in parallel to the cluster for processing.  Probably should think up a more
         intelligent way to do this than sending around the whole Tile obejct.  That object has a bunch of other stuff
@@ -413,6 +450,8 @@ class BathyGrid(BaseGrid):
             if True, will clear out any existing grids before generating this one
         auto_resolution
             if True and the tile type supports it, allow the tile to auto calculate the appropriate resolution
+        progress_bar
+            if True, display a progress bar
         """
 
         if not self.client:
@@ -437,12 +476,14 @@ class BathyGrid(BaseGrid):
                     data_for_workers = self.client.scatter(data_for_workers)
                     futs.append(self.client.map(_gridding_parallel, data_for_workers))
                     data_for_workers = []
-                    progress(futs, multi=False)
+                    if progress_bar:
+                        progress(futs, multi=False)
         if data_for_workers:
             print('processing surface: group {} out of {}'.format(cur_run, total_runs))
             data_for_workers = self.client.scatter(data_for_workers)
             futs.append(self.client.map(_gridding_parallel, data_for_workers))
-            progress(futs, multi=False)
+            if progress_bar:
+                progress(futs, multi=False)
         wait(futs)
         results = self.client.gather(futs)
         results = [item for sublist in results for item in sublist]
@@ -451,7 +492,8 @@ class BathyGrid(BaseGrid):
         self.tiles[self.tiles != None] = tiles
         self.resolutions = np.sort(np.unique(resolutions))
 
-    def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, use_dask: bool = False):
+    def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, use_dask: bool = False,
+             progress_bar: bool = True):
         """
         Gridding involves calling 'grid' on all child grids/tiles until you eventually call 'grid' on a Tile.  The Tiles
         are the objects that actually contain the points / gridded data
@@ -466,6 +508,8 @@ class BathyGrid(BaseGrid):
             if True, will clear out any existing grids before generating this one
         use_dask
             if True, will start a dask LocalCluster instance and perform the gridding in parallel
+        progress_bar
+            if True, display a progress bar
         """
 
         if self.is_empty:
@@ -475,9 +519,9 @@ class BathyGrid(BaseGrid):
             auto_resolution = True
             resolution = self._calculate_resolution()
         if use_dask:
-            self._grid_parallel(algorithm, resolution, clear_existing, auto_resolution=auto_resolution)
+            self._grid_parallel(algorithm, resolution, clear_existing, auto_resolution=auto_resolution, progress_bar=progress_bar)
         else:
-            self._grid_regular(algorithm, resolution, clear_existing, auto_resolution=auto_resolution)
+            self._grid_regular(algorithm, resolution, clear_existing, auto_resolution=auto_resolution, progress_bar=progress_bar)
         return self.resolutions
 
     def plot(self, layer: str = 'depth', resolution: float = None):
@@ -580,159 +624,10 @@ class BathyGrid(BaseGrid):
         return x, y, surf, valid_nodes, new_mins, new_maxs
 
 
-class NumpyGrid(BathyGrid):
-    def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
-                 tile_size: float = 1024.0, set_extents_manually: bool = False):
-        super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
-                         set_extents_manually=set_extents_manually)
-
-    def _save_bathygrid_metadata(self, folderpath):
-        if not os.path.exists(folderpath):
-            raise EnvironmentError('Unable to save pickle file to {}, does not exist'.format(folderpath))
-        fileout = os.path.join(folderpath, 'metadata.json')
-        data = {ky: self.__getattribute__(ky) for ky in desired_keys}
-        for ky in numpy_to_list:
-            data[ky] = data[ky].tolist()
-        for ky in float_to_str:
-            data[ky] = str(data[ky])
-        with open(fileout, 'w') as fout:
-            json.dump(data, fout, indent=4)
-
-    def _load_bathygrid_metadata(self, folderpath):
-        if not os.path.exists(folderpath):
-            raise EnvironmentError('Unable to save pickle file to {}, does not exist'.format(folderpath))
-        fileout = os.path.join(folderpath, 'metadata.json')
-        with open(fileout, 'r') as fout:
-            data = json.load(fout)
-        for ky in numpy_to_list:
-            data[ky] = np.array(data[ky])
-        for ky in float_to_str:
-            data[ky] = float(data[ky])
-        for ky in data:
-            self.__setattr__(ky, data[ky])
-
-
-class SRGrid(NumpyGrid):
-    """
-    SRGrid is the basic implementation of the BathyGrid.  This class contains the metadata and other functions required
-    to build and maintain the BathyGrid
-    """
-    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024.0):
-        super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size)
-        self.can_grow = True
-
-    def _convert_dataset(self):
-        """
-        We currently convert xarray Dataset input into a numpy structured array.  Xarry Datasets appear to be rather
-        slow in testing, I believe because they do some stuff under the hood with matching coordinates when you do
-        basic operations.  Also, you can't do any fancy indexing with xarray Dataset, at best you can use slice with isel.
-
-        For all these reasons, we just convert to numpy.
-        """
-        allowed_vars = ['x', 'y', 'z', 'tvu', 'thu']
-        dtyp = [(varname, self.data[varname].dtype) for varname in allowed_vars if varname in self.data]
-        empty_struct = np.empty(len(self.data['x']), dtype=dtyp)
-        for varname, vartype in dtyp:
-            empty_struct[varname] = self.data[varname].values
-        self.data = empty_struct
-
-    def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
-                         vertical_reference: str = None):
-        """
-        Update the bathygrid metadata for the new data
-
-        Parameters
-        ----------
-        container_name
-            the folder name of the converted data, equivalent to splitting the output_path variable in the kluster
-            dataset
-        file_list
-            list of multibeam files that exist in the data to add to the grid
-        epsg
-            epsg (or proj4 string) for the coordinate system of the data.  Proj4 only shows up when there is no valid
-            epsg
-        vertical_reference
-            vertical reference of the data
-        """
-
-        if file_list:
-            self.container[container_name] = file_list
-        else:
-            self.container[container_name] = ['Unknown']
-
-        if self.epsg and (self.epsg != int(epsg)):
-            raise ValueError('BathyGrid: Found existing coordinate system {}, new coordinate system {} must match'.format(self.epsg,
-                                                                                                                          epsg))
-        if self.vertical_reference and (self.vertical_reference != vertical_reference):
-            raise ValueError('BathyGrid: Found existing vertical reference {}, new vertical reference {} must match'.format(self.vertical_reference,
-                                                                                                                            vertical_reference))
-        self.epsg = int(epsg)
-        self.vertical_reference = vertical_reference
-
-    def _validate_input_data(self):
-        """
-        Ensure you get a structured numpy array as the input dataset.  If dataset is an Xarray Dataset, we convert it to
-        Numpy for performance reasons.
-        """
-
-        if type(self.data) in [np.ndarray, Array]:
-            if not self.data.dtype.names:
-                raise ValueError('BathyGrid: numpy array provided for data, but no names were found, array must be a structured array')
-            if 'x' not in self.data.dtype.names or 'y' not in self.data.dtype.names:
-                raise ValueError('BathyGrid: numpy structured array provided for data, but "x" or "y" not found in variable names')
-            self.layernames = [self.rev_layer_lookup[var] for var in self.data.dtype.names if var in ['z', 'tvu']]
-        elif type(self.data) == xr.Dataset:
-            if 'x' not in self.data:
-                raise ValueError('BathyGrid: xarray Dataset provided for data, but "x" or "y" not found in variable names')
-            if len(self.data.dims) > 1:
-                raise ValueError('BathyGrid: xarray Dataset provided for data, but found multiple dimensions, must be one dimensional: {}'.format(self.data.dims))
-            self.layernames = [self.rev_layer_lookup[var] for var in self.data if var in ['z', 'tvu']]
-            self._convert_dataset()  # internally we just convert xarray dataset to numpy for ease of use
-        else:
-            raise ValueError('QuadTree: numpy structured array or dask array with "x" and "y" as variable must be provided')
-
-    def save(self, folderpath: str):
-        folderpath = create_folder(folderpath, 'grid')
-
-
-class VRGridTile(SRGrid):
-    """
-    VRGridTile is a simple approach to variable resolution gridding.  We build a grid of BathyGrids, where each BathyGrid
-    has a certain number of tiles (each tile with size subtile_size).  Each of those tiles can have a different resolution
-    depending on depth.
-    """
-
-    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024, subtile_size: float = 128):
-        super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size)
-        self.can_grow = True
-        self.subtile_size = subtile_size
-
-    def _build_tile(self, tile_x_origin: float, tile_y_origin: float):
-        """
-        For the VRGridTile class, the 'Tiles' are in fact BathyGrids, which contain their own tiles.  subtile_size controls
-        the size of the Tiles within this BathyGrid.
-
-        Parameters
-        ----------
-        tile_x_origin
-            x origin coordinate for the tile, in the same units as the BathyGrid
-        tile_y_origin
-            y origin coordinate for the tile, in the same units as the BathyGrid
-
-        Returns
-        -------
-        BathyGrid
-            empty BathyGrid for this origin / tile size
-        """
-        return NumpyGrid(min_x=tile_x_origin, min_y=tile_y_origin, max_x=tile_x_origin + self.tile_size,
-                         max_y=tile_y_origin + self.tile_size, tile_size=self.subtile_size,
-                         set_extents_manually=True)
-
-
 def _gridding_parallel(data_blob: list):
     tile, algorithm, resolution, clear_existing, auto_resolution = data_blob
     if isinstance(tile, BathyGrid) and auto_resolution:
-        resolution = tile.grid(algorithm, None, clear_existing=clear_existing)
+        resolution = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
     else:
-        resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing)
+        resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
     return resolution, tile
