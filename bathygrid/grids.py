@@ -4,7 +4,7 @@ from bathygrid.utilities import is_power_of_two
 
 class Grid:
     """
-    Base grid for the Tile and the BathyGrid.
+    Base grid for the Tile and the BathyGrid.  Contains the coordinate attributes
     """
     def __init__(self):
         self.min_y = None
@@ -17,6 +17,10 @@ class Grid:
 
 
 class BaseGrid(Grid):
+    """
+    Base class for all grid objects.  Contains all the attributes that allow for the generation of a grid of Tiles or
+    other Grids within this Grid.
+    """
     def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024.0):
         super().__init__()
         self.origin_x = min_x
@@ -44,6 +48,9 @@ class BaseGrid(Grid):
 
     @property
     def is_empty(self):
+        """
+        Return True if there are any Tiles within this grid
+        """
         if self.tiles is None:
             return True
         elif not self.tiles.any():
@@ -51,6 +58,9 @@ class BaseGrid(Grid):
         return False
 
     def _adjust_extents(self):
+        """
+        If this BathyGrid is allowed to grow, we extend the boundaries by integer increments of tile_size
+        """
         if self.can_grow:
             nearest_lower_x = np.floor((self.min_x - self.origin_x) / self.tile_size) * self.tile_size
             nearest_higher_x = np.ceil((self.max_x - self.origin_x) / self.tile_size) * self.tile_size
@@ -64,6 +74,15 @@ class BaseGrid(Grid):
             self.max_x, self.max_y = nearest_higher_x, nearest_higher_y
 
     def _build_grid(self):
+        """
+        Build a new grid after adjusting or initializing the extents.  Provides the edges and origin coordinates for the
+        grid.
+
+        If a grid exists (not is_empty), we pick up all the existing tiles, build a new grid with the new extents, and
+        then put down the tiles in the right place in the new grid.  Allows the Grid to grow or contract as points are
+        added and removed.
+        """
+
         if self.min_y is None or self.min_x is None or self.max_y is None or self.max_x is None:
             raise ValueError('UtmGrid not initialized!')
         self._adjust_extents()
@@ -90,6 +109,21 @@ class BaseGrid(Grid):
         self.maximum_tiles = self.tile_x_origin.size
 
     def _init_from_extents(self, min_y: float, min_x: float, max_y: float, max_x: float):
+        """
+        Build a new grid by first populating the extents of the grid.
+
+        Parameters
+        ----------
+        min_y
+            minimum y value (latitude, northing) for the grid extents
+        min_x
+            minimum x value (longitude, easting) for the grid extents
+        max_y
+            maximum y value (latitude, northing) for the grid extents
+        max_x
+            maximum x value (longitude, easting) for the grid extents
+        """
+
         self.min_y = min_y
         self.min_x = min_x
         self.max_y = max_y
@@ -97,6 +131,21 @@ class BaseGrid(Grid):
         self._build_grid()
 
     def _update_extents(self, min_y: float, min_x: float, max_y: float, max_x: float):
+        """
+        Update the grid with new extents, triggering a new grid build carrying over existing tiles
+
+        Parameters
+        ----------
+        min_y
+            minimum y value (latitude, northing) for the grid extents
+        min_x
+            minimum x value (longitude, easting) for the grid extents
+        max_y
+            maximum y value (latitude, northing) for the grid extents
+        max_x
+            maximum x value (longitude, easting) for the grid extents
+        """
+
         self.min_y = min(min_y, self.min_y)
         self.min_x = min(min_x, self.min_x)
         self.max_y = max(max_y, self.max_y)
@@ -104,11 +153,30 @@ class BaseGrid(Grid):
         self._build_grid()
 
     def _tile_idx_to_row_col(self, tile_index: int):
-        cols, rows = self.tile_x_origin.shape
-        return divmod(tile_index, rows)
+        """
+        When operating on tiles, we generally flatten the numpy array of tiles and iterate through.  Here we take that
+        flattened index and convert it to the row, column of the
+
+        Parameters
+        ----------
+        tile_index
+
+        Returns
+        -------
+        int
+            row index
+        int
+            column index
+        """
+
+        rows, cols = self.tile_x_origin.shape
+        return divmod(tile_index, cols)
 
 
 class TileGrid(Grid):
+    """
+    Base grid for all Tiles.  Tiles have cells instead of other Tiles.  Has some routines for checking cell, point count.
+    """
     def __init__(self, min_x: float, min_y: float, size: float):
         super().__init__()
         self.data = None
@@ -124,18 +192,39 @@ class TileGrid(Grid):
 
     @property
     def is_empty(self):
+        """
+        Check if the Tile contains any points
+        """
+
         if not self.points_count:
             return True
         return False
 
     @property
     def points_count(self):
+        """
+        Return the number of points in this Tile
+        """
+
         if self.data is not None:
             return int(self.data.size)
         else:
             return 0
 
     def _init_from_size(self, min_x: float, min_y: float, size: float):
+        """
+        Build the extents and width/height from the provided values
+
+        Parameters
+        ----------
+        min_x
+            minimum x value (longitude, easting) for the grid extents
+        min_y
+            minimum y value (latitude, northing) for the grid extents
+        size
+            size of the tile in x/y units, assumes tiles are square
+        """
+
         self.min_x = min_x
         self.max_x = min_x + size
         self.min_y = min_y

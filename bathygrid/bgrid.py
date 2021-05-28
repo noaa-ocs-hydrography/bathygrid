@@ -40,9 +40,6 @@ class BathyGrid(BaseGrid):
         self.vertical_reference = None  # string identifier for the vertical reference
         self.resolutions = []
 
-        self.layer_lookup = {'depth': 'z', 'vertical_uncertainty': 'tvu', 'horizontal_uncertainty': 'thu'}
-        self.rev_layer_lookup = {'z': 'depth', 'tvu': 'vertical_uncertainty', 'thu': 'horizontal_uncertainty'}
-
         self.name = ''
         self.output_folder = ''
         self.subtile_size = 0
@@ -387,6 +384,7 @@ class BathyGrid(BaseGrid):
         list
             new maxs to use
         """
+
         data = self.get_layer_by_name(layer, resolution)
         notnan = ~np.isnan(data)
         rows = np.any(notnan, axis=1)
@@ -558,6 +556,7 @@ class BathyGrid(BaseGrid):
         list
             list of str surface layer names (ex: ['depth', 'horizontal_uncertainty', 'vertical_uncertainty']
         """
+
         if self.no_grid:
             return []
         for tile in self.tiles.flat:
@@ -607,6 +606,7 @@ class BathyGrid(BaseGrid):
         list
             new maximum x,y coordinate for the trimmed layer
         """
+
         if self.no_grid:
             raise ValueError('BathyGrid: Grid is empty, gridding has not been run yet.')
         if not resolution:
@@ -625,6 +625,9 @@ class BathyGrid(BaseGrid):
 
 
 def _gridding_parallel(data_blob: list):
+    """
+    Gridding routine suited for running in parallel using the dask cluster.
+    """
     tile, algorithm, resolution, clear_existing, auto_resolution = data_blob
     if isinstance(tile, BathyGrid) and auto_resolution:
         resolution = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)

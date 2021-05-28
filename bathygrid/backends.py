@@ -159,6 +159,26 @@ class BaseStorage(BathyGrid):
         if os.path.exists(tile_folder):
             rmtree(tile_folder)
 
+    def _clear_tile_contents(self, tile_folder: str):
+        self._clear_tile(tile_folder)
+        os.makedirs(tile_folder)
+
+    def _save_grid(self):
+        if self.output_folder:
+            root_folder = os.path.join(self.output_folder, self.name)
+            os.makedirs(root_folder, exist_ok=True)
+            self._save_bathygrid_metadata(root_folder)
+
+    def _save_tile(self, tile: Tile, flat_index: int):
+        if self.output_folder:
+            tile_folder, row, col = self._get_tile_folder(self.output_folder, flat_index)
+            if tile is None:
+                self._clear_tile(tile_folder)
+            else:
+                self._clear_tile_contents(tile_folder)
+                self._save_tile_metadata(tile, tile_folder)
+                self._save_tile_data(tile, tile_folder)
+
     def save(self, folderpath: str, progress_bar: bool = True):
         """
         Save to a new root folder within the provided folderpath
@@ -239,24 +259,38 @@ class BaseStorage(BathyGrid):
 
 class NumpyGrid(BaseStorage):
     """
-    Backend for saving the point data / gridded data to numpy chunked files
+    Backend for saving the point data / gridded data to numpy chunked files, I think this is going to be less efficient
+    and create too many files/folders.  But there isn't really an option to lazy load in numpy unless I want to carry
+    around a loaded npz object and pull out the arrays on demand.
     """
+
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
                  tile_size: float = 1024.0, set_extents_manually: bool = False):
         super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
                          set_extents_manually=set_extents_manually)
         self.storage_type = 'numpy'
 
+    def _numpygrid_todask(self, arr):
+        if not isinstance(arr, da.Array):
+            return da.from_array(arr)
+        return arr
+
     def _save_tile_data(self, tile: Tile, folderpath: str):
-        da.to_npy_stack(folderpath + '/data', da.from_array(tile.data))
+        """
+        Convert the arrays to dask and save them as stacked numpy arrays
+        """
+        da.to_npy_stack(folderpath + '/data', self._numpygrid_todask(tile.data))
         for resolution in tile.cells.keys():
-            da.to_npy_stack(folderpath + '/cells_{}_depth'.format(resolution), da.from_array(tile.cells[resolution]['depth']))
-            da.to_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), da.from_array(tile.cells[resolution]['vertical_uncertainty']))
-            da.to_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), da.from_array(tile.cells[resolution]['horizontal_uncertainty']))
-            da.to_npy_stack(folderpath + '/cell_edges_x_{}'.format(resolution), da.from_array(tile.cell_edges_x[resolution]))
-            da.to_npy_stack(folderpath + '/cell_edges_y_{}'.format(resolution), da.from_array(tile.cell_edges_y[resolution]))
+            da.to_npy_stack(folderpath + '/cells_{}_depth'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['depth']))
+            da.to_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['vertical_uncertainty']))
+            da.to_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['horizontal_uncertainty']))
+            da.to_npy_stack(folderpath + '/cell_edges_x_{}'.format(resolution), self._numpygrid_todask(tile.cell_edges_x[resolution]))
+            da.to_npy_stack(folderpath + '/cell_edges_y_{}'.format(resolution), self._numpygrid_todask(tile.cell_edges_y[resolution]))
 
     def _load_tile_data(self, tile: Tile, folderpath: str):
+        """
+        lazy load from the saved tile arrays into dask arrays and populate the tile attributes.
+        """
         resolutions = []
         data_folders = os.listdir(folderpath)
         for df in data_folders:

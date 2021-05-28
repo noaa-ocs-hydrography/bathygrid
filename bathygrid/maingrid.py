@@ -93,14 +93,25 @@ class SRGrid(NumpyGrid):
         else:
             raise ValueError('QuadTree: numpy structured array or dask array with "x" and "y" as variable must be provided')
 
-    def save(self, folderpath: str = None, progress_bar: bool = True):
-        if not folderpath:
+    def save(self, folder_path: str = None, progress_bar: bool = True):
+        """
+        Recursive save for all BathyGrid/Tile objects within this class.
+
+        Parameters
+        ----------
+        folder_path
+            container folder for the grid
+        progress_bar
+            if True, displays a console progress bar
+        """
+
+        if not folder_path:
             if self.output_folder:
                 super().save(self.output_folder, progress_bar=progress_bar)
             else:
                 raise ValueError('Grid has not been saved before, you must provide a folder path to save.')
         else:
-            fpath, fname = os.path.split(folderpath)
+            fpath, fname = os.path.split(folder_path)
             folderpath = create_folder(fpath, fname)
             self.output_folder = folderpath
             super().save(folderpath, progress_bar=progress_bar)
