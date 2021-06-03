@@ -1,20 +1,10 @@
 import numpy as np
 from bathygrid.algorithms import *
-
-
-def get_data():
-    depth = np.linspace(10, 20, 20)
-    tvu = np.linspace(1, 2, 20)
-    thu = np.linspace(0.5, 1.5, 20)
-    cell_indices = np.array([3, 1, 0, 2, 1, 0, 0, 7, 7, 2, 5, 4, 5, 4, 5, 6, 5, 6, 3, 3])
-    grid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
-    tvugrid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
-    thugrid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
-    return depth, tvu, thu, cell_indices, grid, tvugrid, thugrid
+from test_data.test_data import get_grid_data
 
 
 def test_grid_mean():
-    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_data()
+    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_grid_data()
     nb_grid_mean(depth, tvu, thu, cell_indices, grid, tvugrid, thugrid)
     dpthgrid = np.round(grid, 3)
     tvugrid = np.round(tvugrid, 3)
@@ -27,7 +17,7 @@ def test_grid_mean():
 
 
 def test_grid_shoalest():
-    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_data()
+    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_grid_data()
     nb_grid_shoalest(depth, tvu, thu, cell_indices, grid, tvugrid, thugrid)
     dpthgrid = np.round(grid, 3)
     tvugrid = np.round(tvugrid, 3)

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from bathygrid.grids import BaseGrid
 from bathygrid.tile import SRTile, Tile
-from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar
+from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar, create_folder
 
 
 depth_resolution_lookup = {20: 0.5, 40: 1.0, 60: 2.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 32.0, 1280: 64.0, 2560: 128.0,
@@ -25,7 +25,7 @@ class BathyGrid(BaseGrid):
     """
 
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0, tile_size: float = 1024.0,
-                 set_extents_manually: bool = False):
+                 set_extents_manually: bool = False, output_folder: str = ''):
         super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size)
 
         if set_extents_manually:
@@ -41,9 +41,9 @@ class BathyGrid(BaseGrid):
         self.resolutions = []
 
         self.name = ''
-        self.output_folder = ''
+        self.output_folder = output_folder
         self.subtile_size = 0
-        self.sub_type = 'tile'
+        self.sub_type = 'srtile'
         self.storage_type = 'numpy'
         self.client = None
 
@@ -118,7 +118,8 @@ class BathyGrid(BaseGrid):
 
     def _build_tile(self, tile_x_origin: float, tile_y_origin: float):
         """
-        Default tile of the BathyGrid is just a simple SRTile
+        Default tile of the BathyGrid is just a simple SRTile.  More sophisticated grids will override this method to
+        return the tile of their choice
 
         Parameters
         ----------
@@ -174,6 +175,42 @@ class BathyGrid(BaseGrid):
     def _validate_input_data(self):
         """
         inherited class can write code here to validate the input data
+        """
+        pass
+
+    def _save_grid(self):
+        """
+        inherited class can write code here to save the grid data, see backends
+        """
+        pass
+
+    def _save_tile(self, tile: Tile, flat_index: int, only_points: bool = False, only_grid: bool = False):
+        """
+        inherited class can write code here to save the tile data, see backends
+        """
+        pass
+
+    def _load_grid(self):
+        """
+        inherited class can write code here to load the grid data, see backends
+        """
+        pass
+
+    def _load_tile(self, flat_index: int, only_points: bool = False, only_grid: bool = False):
+        """
+        inherited class can write code here to load the tile data, see backends
+        """
+        pass
+
+    def save(self, folderpath: str = None, progress_bar: bool = True):
+        """
+        inherited class can write code here to load the tile data, see backends
+        """
+        pass
+
+    def load(self, folderpath: str = None):
+        """
+        inherited class can write code here to load the tile data, see backends
         """
         pass
 
@@ -242,25 +279,29 @@ class BathyGrid(BaseGrid):
         """
 
         if self.data is not None:
+            self._save_grid()
             binnum = bin2d_with_indices(self.data['x'], self.data['y'], self.tile_edges_x, self.tile_edges_y)
             unique_locs = np.unique(binnum)
             flat_tiles = self.tiles.ravel()
             tilexorigin = self.tile_x_origin.ravel()
             tileyorigin = self.tile_y_origin.ravel()
             if progress_bar:
-                print_progress_bar(0, len(unique_locs))
+                print_progress_bar(0, len(unique_locs), 'Adding Points to {}:'.format(self.name))
             for cnt, ul in enumerate(unique_locs):
                 if progress_bar:
-                    print_progress_bar(cnt + 1, len(unique_locs))
+                    print_progress_bar(cnt + 1, len(unique_locs), 'Adding Points to {}:'.format(self.name))
                 point_mask = binnum == ul
                 pts = self.data[point_mask]
                 if flat_tiles[ul] is None:
                     flat_tiles[ul] = self._build_tile(tilexorigin[ul], tileyorigin[ul])
-                    tile_row, tile_col = self._tile_idx_to_row_col(ul)
-                    flat_tiles[ul].name = '{}_{}'.format(tile_row, tile_col)
+                    x, y = self._tile_idx_to_origin_point(ul)
+                    flat_tiles[ul].name = '{}_{}'.format(x, y)
                 flat_tiles[ul].add_points(pts, container_name, progress_bar=False)
                 if flat_tiles[ul].is_empty:
                     flat_tiles[ul] = None
+                if self.sub_type in ['srtile', 'quadtile']:
+                    self._save_tile(flat_tiles[ul], ul, only_points=True)
+                    self._load_tile(ul, only_points=True)
             self.number_of_tiles = np.count_nonzero(self.tiles != None)
 
     def add_points(self, data: Union[xr.Dataset, Array, np.ndarray], container_name: str, file_list: list = None,
@@ -289,6 +330,8 @@ class BathyGrid(BaseGrid):
 
         if isinstance(data, (Array, xr.Dataset)):
             data = data.compute()
+        if container_name in self.container:
+            raise ValueError('{} is already within this bathygrid instance, remove_points first if you want to replace this data'.format(container_name))
         self.data = data
         self._validate_input_data()
         self._update_metadata(container_name, file_list, crs, vertical_reference)
@@ -296,6 +339,19 @@ class BathyGrid(BaseGrid):
         self._update_tiles(container_name, progress_bar)
         self._update_mean_depth()
         self.data = None  # points are in the tiles, clear this attribute to free up memory
+
+    def _remove_tile(self, flat_index: int):
+        """
+        Removing a tile just involves setting the tile location in self.tiles to None, but we also want to update
+        the metadata as well
+        """
+
+        tile = self.tiles.flat[flat_index]
+        if tile:
+            if self.existing_tile_mask:
+                self.existing_tile_mask.flat[flat_index] = False
+            self.number_of_tiles -= 1
+            self.tiles.flat[flat_index] = None
 
     def remove_points(self, container_name: str = None, progress_bar: bool = True):
         """
@@ -315,16 +371,20 @@ class BathyGrid(BaseGrid):
             if not self.is_empty:
                 flat_tiles = self.tiles.ravel()
                 if progress_bar:
-                    print_progress_bar(0, len(flat_tiles))
+                    print_progress_bar(0, len(flat_tiles), 'Removing Points from {}:'.format(self.name))
                 for cnt, tile in enumerate(flat_tiles):
                     if progress_bar:
-                        print_progress_bar(cnt + 1, len(flat_tiles))
+                        print_progress_bar(cnt + 1, len(flat_tiles), 'Removing Points from {}:'.format(self.name))
                     if tile:
                         tile.remove_points(container_name, progress_bar=False)
                         if tile.is_empty:
-                            flat_tiles[flat_tiles == tile] = None
+                            self._remove_tile(cnt)
+                    if self.sub_type in ['srtile', 'quadtile']:
+                        self._save_tile(flat_tiles[cnt], cnt, only_points=True)
+                        self._load_tile(cnt, only_points=True)
             if self.is_empty:
                 self.tiles = None
+            self._save_grid()
 
     def get_layer_by_name(self, layer: str = 'depth', resolution: float = None):
         """
@@ -418,10 +478,10 @@ class BathyGrid(BaseGrid):
 
         self.resolutions = []
         if progress_bar:
-            print_progress_bar(0, self.tiles.size)
+            print_progress_bar(0, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
         for cnt, tile in enumerate(self.tiles.flat):
             if progress_bar:
-                print_progress_bar(cnt + 1, self.tiles.size)
+                print_progress_bar(cnt + 1, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
             if tile:
                 if isinstance(tile, BathyGrid) and auto_resolution:
                     resolution = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
@@ -429,7 +489,11 @@ class BathyGrid(BaseGrid):
                     resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
                 if resolution not in self.resolutions:
                     self.resolutions.append(resolution)
+            if self.sub_type in ['srtile', 'quadtile']:
+                self._save_tile(tile, cnt, only_grid=True)
+                self._load_tile(cnt, only_grid=True)
         self.resolutions = np.sort(np.unique(self.resolutions))
+        self._save_grid()
 
     def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,
                        progress_bar: bool = True):
@@ -489,6 +553,9 @@ class BathyGrid(BaseGrid):
         tiles = [res[1] for res in results]
         self.tiles[self.tiles != None] = tiles
         self.resolutions = np.sort(np.unique(resolutions))
+        if self.output_folder:
+            self.save()
+            self.load()
 
     def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, use_dask: bool = False,
              progress_bar: bool = True):

@@ -155,7 +155,7 @@ class BaseGrid(Grid):
     def _tile_idx_to_row_col(self, tile_index: int):
         """
         When operating on tiles, we generally flatten the numpy array of tiles and iterate through.  Here we take that
-        flattened index and convert it to the row, column of the
+        flattened index and convert it to the row, column of the tile
 
         Parameters
         ----------
@@ -171,6 +171,27 @@ class BaseGrid(Grid):
 
         rows, cols = self.tile_x_origin.shape
         return divmod(tile_index, cols)
+
+    def _tile_idx_to_origin_point(self, tile_index: int):
+        """
+        When operating on tiles, we generally flatten the numpy array of tiles and iterate through.  Here we take that
+        flattened index and convert it to the xy origin point
+
+        Parameters
+        ----------
+        tile_index
+
+        Returns
+        -------
+        float
+            x origin
+        float
+            y origin
+        """
+
+        x_origin = self.tile_x_origin.flat[tile_index]
+        y_origin = self.tile_y_origin.flat[tile_index]
+        return x_origin, y_origin
 
 
 class TileGrid(Grid):

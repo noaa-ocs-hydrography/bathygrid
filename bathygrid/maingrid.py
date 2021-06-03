@@ -1,12 +1,7 @@
 import os
 import numpy as np
 from dask.array import Array
-
-try:
-    from tqdm import tqdm
-    tqdm_enabled = True
-except:
-    tqdm_enabled = False
+import xarray as xr
 
 from bathygrid.backends import NumpyGrid
 from bathygrid.utilities import create_folder
@@ -17,11 +12,14 @@ class SRGrid(NumpyGrid):
     SRGrid is the basic implementation of the BathyGrid.  This class contains the metadata and other functions required
     to build and maintain the BathyGrid
     """
-    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024.0):
-        super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size)
+    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024.0, output_folder: str = ''):
+        super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size, output_folder=output_folder)
         self.can_grow = True
         self.name = 'SRGrid_Root'
-        self.sub_type = 'tile'
+        self.sub_type = 'srtile'
+        self.output_folder = output_folder
+        if self.output_folder:
+            os.makedirs(output_folder, exist_ok=True)
 
     def _convert_dataset(self):
         """
@@ -82,13 +80,11 @@ class SRGrid(NumpyGrid):
                 raise ValueError('BathyGrid: numpy array provided for data, but no names were found, array must be a structured array')
             if 'x' not in self.data.dtype.names or 'y' not in self.data.dtype.names:
                 raise ValueError('BathyGrid: numpy structured array provided for data, but "x" or "y" not found in variable names')
-            self.layernames = [self.rev_layer_lookup[var] for var in self.data.dtype.names if var in ['z', 'tvu']]
         elif type(self.data) == xr.Dataset:
             if 'x' not in self.data:
                 raise ValueError('BathyGrid: xarray Dataset provided for data, but "x" or "y" not found in variable names')
             if len(self.data.dims) > 1:
                 raise ValueError('BathyGrid: xarray Dataset provided for data, but found multiple dimensions, must be one dimensional: {}'.format(self.data.dims))
-            self.layernames = [self.rev_layer_lookup[var] for var in self.data if var in ['z', 'tvu']]
             self._convert_dataset()  # internally we just convert xarray dataset to numpy for ease of use
         else:
             raise ValueError('QuadTree: numpy structured array or dask array with "x" and "y" as variable must be provided')
@@ -116,6 +112,25 @@ class SRGrid(NumpyGrid):
             self.output_folder = folderpath
             super().save(folderpath, progress_bar=progress_bar)
 
+    def load(self, folder_path: str = None):
+        """
+        Recursive load for all BathyGrid/Tile objects within this class.
+
+        Parameters
+        ----------
+        folder_path
+            container folder for the grid
+        """
+
+        if not folder_path:
+            if self.output_folder:
+                super().load(self.output_folder)
+            else:
+                raise ValueError('Grid has not been saved before, you must provide a folder path to load.')
+        else:
+            self.output_folder = folder_path
+            super().load(self.output_folder)
+
 
 class VRGridTile(SRGrid):
     """
@@ -124,8 +139,8 @@ class VRGridTile(SRGrid):
     depending on depth.
     """
 
-    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024, subtile_size: float = 128):
-        super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size)
+    def __init__(self, min_x: float = 0, min_y: float = 0, tile_size: float = 1024, output_folder: str = '', subtile_size: float = 128):
+        super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size, output_folder=output_folder)
         self.can_grow = True
         self.subtile_size = subtile_size
         self.name = 'VRGridTile_Root'
@@ -148,7 +163,8 @@ class VRGridTile(SRGrid):
         BathyGrid
             empty BathyGrid for this origin / tile size
         """
+
         return NumpyGrid(min_x=tile_x_origin, min_y=tile_y_origin, max_x=tile_x_origin + self.tile_size,
                          max_y=tile_y_origin + self.tile_size, tile_size=self.subtile_size,
-                         set_extents_manually=True)
+                         set_extents_manually=True, output_folder=os.path.join(self.output_folder, self.name))
 

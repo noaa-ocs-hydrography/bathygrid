@@ -1,30 +1,13 @@
 import numpy as np
 from bathygrid.tile import SRTile
-
-
-x = np.arange(0, 1000, 100, dtype=np.float64)
-y = np.arange(0, 1000, 100, dtype=np.float64)
-x, y = np.meshgrid(x, y)
-x = x.ravel()
-y = y.ravel()
-z = np.linspace(20, 30, num=x.size).astype(np.float32)
-tvu = np.linspace(1, 2, num=x.size).astype(np.float32)
-thu = np.linspace(0.5, 1, num=x.size).astype(np.float32)
-
-dtyp = [('x', np.float64), ('y', np.float64), ('z', np.float32), ('tvu', np.float32), ('thu', np.float32)]
-data = np.empty(len(x), dtype=dtyp)
-data['x'] = x
-data['y'] = y
-data['z'] = z
-data['tvu'] = tvu
-data['thu'] = thu
+from test_data.test_data import smalldata
 
 
 def test_tile_setup():
     til = SRTile(0.0, 0.0, 1024)
     assert til.is_empty
 
-    til.add_points(data, 'test1')
+    til.add_points(smalldata, 'test1')
     assert til.data.size == 100
     assert til.container == {'test1': [0, 100]}
     assert not til.is_empty
@@ -64,15 +47,15 @@ def test_tile_newgrid():
 
 def test_tile_addpoints():
     til = SRTile(0.0, 0.0, 1024)
-    til.add_points(data, 'test1')
+    til.add_points(smalldata, 'test1')
 
-    assert np.array_equal(data, til.data)
+    assert np.array_equal(smalldata, til.data)
     assert til.container == {'test1': [0, 100]}
 
 
 def test_tile_single_resolution():
     til = SRTile(0.0, 0.0, 1024)
-    til.add_points(data, 'test1')
+    til.add_points(smalldata, 'test1')
     til.grid('mean', 128.0)
 
     assert til.cells[128.0]['depth'].shape == (1024 / 128, 1024 / 128)
@@ -110,7 +93,7 @@ def test_tile_single_resolution():
 
 def test_cell_indices_modification():
     til = SRTile(0.0, 0.0, 1024)
-    til.add_points(data, 'test1')
+    til.add_points(smalldata, 'test1')
     assert not til.cell_indices
     til.grid('mean', 128.0)
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
@@ -121,7 +104,7 @@ def test_cell_indices_modification():
                                                              51, 52, 53, 54, 55, 56, 56, 57, 58, 59, 59, 60, 61, 62, 63]))
     til.remove_points('test1')
     assert not til.cell_indices[128.0].any()
-    til.add_points(data, 'test1')
+    til.add_points(smalldata, 'test1')
     assert np.array_equal(til.cell_indices[128.0], np.array([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -139,7 +122,7 @@ def test_cell_indices_modification():
 
 def test_cell_indices_append():
     til = SRTile(0.0, 0.0, 1024)
-    til.add_points(data, 'test1')
+    til.add_points(smalldata, 'test1')
     til.grid('mean', 128.0)
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
@@ -147,7 +130,7 @@ def test_cell_indices_append():
                                                              24, 25, 26, 27, 27, 28, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36, 37,
                                                              38, 39, 40, 40, 41, 42, 43, 43, 44, 45, 46, 47, 48, 48, 49, 50, 51,
                                                              51, 52, 53, 54, 55, 56, 56, 57, 58, 59, 59, 60, 61, 62, 63]))
-    til.add_points(data, 'test2')
+    til.add_points(smalldata, 'test2')
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,

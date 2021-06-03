@@ -172,12 +172,17 @@ class SRTile(Tile):
             self.cell_indices[resolution] = bin2d_with_indices(self.data['x'], self.data['y'], self.cell_edges_x[resolution],
                                                                self.cell_edges_y[resolution])
         else:
+            self.data = np.array(self.data)
             if not isinstance(self.cell_indices[resolution], np.ndarray):
                 self.cell_indices[resolution] = self.cell_indices[resolution].compute()
+            self.cell_indices[resolution] = np.array(self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
             if not isinstance(self.cells[resolution]['depth'], np.ndarray):
                 self.cells[resolution]['depth'] = self.cells[resolution]['depth'].compute()
                 self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution]['vertical_uncertainty'].compute()
                 self.cells[resolution]['horizontal_uncertainty'] = self.cells[resolution]['horizontal_uncertainty'].compute()
+            self.cells[resolution]['depth'] = np.array(self.cells[resolution]['depth'])
+            self.cells[resolution]['vertical_uncertainty'] = np.array(self.cells[resolution]['vertical_uncertainty'])
+            self.cells[resolution]['horizontal_uncertainty'] = np.array(self.cells[resolution]['horizontal_uncertainty'])
             new_points = self.cell_indices[resolution] == -1
             if new_points.any():
                 self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points], self.data['y'][new_points],
