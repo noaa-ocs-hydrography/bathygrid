@@ -18,16 +18,16 @@ VERSION = ''
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-            'bokeh==2.2.3',
-            'dask==2021.1.0',
-            'distributed==2021.1.0',
+            'bokeh==2.3.0',
+            'dask==2021.3.0',
+            'distributed==2021.3.0',
             'fasteners==0.14.1',
-            'matplotlib==3.3.3',  # >=3.3.3 required, FuncAnimation and Pyside2/matplotlib do not play well in 3.2.1
+            'matplotlib==3.3.4',  # >=3.3.3 required, FuncAnimation and Pyside2/matplotlib do not play well in 3.2.1
             'numba==0.52.0',
             'psutil==5.8.0',
-            'numpy==1.19.5',  # cannot be 1.19.4, see https://tinyurl.com/y3dm3h86
+            'numpy>=1.20.0',  # cannot be 1.19.4, see https://tinyurl.com/y3dm3h86
             'scipy==1.6.0',
-            'xarray==0.16.2',
+            'xarray==0.17.0',
             'zarr==2.6.1'
             ]
 
