@@ -202,6 +202,9 @@ class BathyGrid(BaseGrid):
         """
         pass
 
+    def _load_tile_data_to_memory(self, tile: Tile, only_points: bool = False, only_grid: bool = False):
+        pass
+
     def save(self, folderpath: str = None, progress_bar: bool = True):
         """
         inherited class can write code here to load the tile data, see backends
@@ -529,6 +532,8 @@ class BathyGrid(BaseGrid):
         chunk_index = 0
         for tile in self.tiles.flat:
             if tile:
+                if self.sub_type in ['srtile', 'quadtile']:
+                    self._load_tile_data_to_memory(tile)
                 data_for_workers.append([tile, algorithm, resolution, clear_existing, auto_resolution])
                 chunk_index += 1
                 if chunk_index == chunks_at_a_time:
@@ -553,9 +558,7 @@ class BathyGrid(BaseGrid):
         tiles = [res[1] for res in results]
         self.tiles[self.tiles != None] = tiles
         self.resolutions = np.sort(np.unique(resolutions))
-        if self.output_folder:
-            self.save()
-            self.load()
+        self._save_grid()
 
     def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, use_dask: bool = False,
              progress_bar: bool = True):
@@ -577,6 +580,8 @@ class BathyGrid(BaseGrid):
             if True, display a progress bar
         """
 
+        if resolution is not None:
+            resolution = float(resolution)
         if self.is_empty:
             raise ValueError('BathyGrid: Grid is empty, no points have been added')
         auto_resolution = False
