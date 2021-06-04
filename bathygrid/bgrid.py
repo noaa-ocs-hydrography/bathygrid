@@ -35,7 +35,7 @@ class BathyGrid(BaseGrid):
             self.max_x = max_x
             self.max_y = max_y
 
-        self.mean_depth = None
+        self.mean_depth = 0.0
 
         self.epsg = None  # epsg code
         self.vertical_reference = None  # string identifier for the vertical reference
@@ -86,13 +86,48 @@ class BathyGrid(BaseGrid):
                     return True
         return False
 
+    def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
+                         vertical_reference: str = None):
+        """
+        Update the bathygrid metadata for the new data
+
+        Parameters
+        ----------
+        container_name
+            the folder name of the converted data, equivalent to splitting the output_path variable in the kluster
+            dataset
+        file_list
+            list of multibeam files that exist in the data to add to the grid
+        epsg
+            epsg (or proj4 string) for the coordinate system of the data.  Proj4 only shows up when there is no valid
+            epsg
+        vertical_reference
+            vertical reference of the data
+        """
+
+        if file_list:
+            self.container[container_name] = file_list
+        else:
+            self.container[container_name] = ['Unknown']
+
+        if self.epsg and epsg:
+            if self.epsg != int(epsg):
+                raise ValueError('BathyGrid: Found existing coordinate system {}, new coordinate system {} must match'.format(self.epsg,
+                                                                                                                              epsg))
+        if epsg:
+            self.epsg = int(epsg)
+        if self.vertical_reference and (self.vertical_reference != vertical_reference):
+            raise ValueError('BathyGrid: Found existing vertical reference {}, new vertical reference {} must match'.format(self.vertical_reference,
+                                                                                                                            vertical_reference))
+        self.vertical_reference = vertical_reference
+
     def _update_mean_depth(self):
         """
         Calculate the mean depth of all loaded points before they are loaded into tiles and cleared from this object
         """
 
         if self.data is None or not self.data['z'].any():
-            self.mean_depth = None
+            self.mean_depth = 0.0
         else:
             self.mean_depth = np.round(self.data['z'].mean(), 3)
 
@@ -107,7 +142,7 @@ class BathyGrid(BaseGrid):
             resolution to use at the existing mean_depth
         """
 
-        if self.mean_depth is None:
+        if not self.mean_depth:
             raise ValueError('SRTile: Unable to calculate resolution when mean_depth is None')
         dpth_keys = list(depth_resolution_lookup.keys())
         # get next positive value in keys of resolution lookup
@@ -163,13 +198,6 @@ class BathyGrid(BaseGrid):
     def _convert_dataset(self):
         """
         inherited class can write code here to convert the input data
-        """
-        pass
-
-    def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
-                         vertical_reference: str = None):
-        """
-        inherited class can write code here to handle the metadata
         """
         pass
 
@@ -644,7 +672,14 @@ class BathyGrid(BaseGrid):
             return []
         for tile in self.tiles.flat:
             if tile:
-                return list(tile.cells.keys)
+                if isinstance(tile, Tile):
+                    for resolution in tile.cells:
+                        return list(tile.cells[resolution].keys())
+                elif tile.number_of_tiles > 0:  # this is a vr grid, with subgrids within the main grid
+                    for subtile in tile.tiles.flat:
+                        if subtile:
+                            for resolution in subtile.cells:
+                                return list(subtile.cells[resolution].keys())
         return []
 
     def return_extents(self):

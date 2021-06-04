@@ -4,7 +4,7 @@ from pytest import approx
 from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.tile import Tile
-from test_data.test_data import smalldata2, smalldata3, deepdata
+from test_data.test_data import smalldata2, smalldata3, deepdata, closedata
 
 
 def test_SRGrid_setup():
@@ -286,3 +286,27 @@ def test_grid_names():
     assert bg.tiles[0][0].name == '0.0_49152.0'
     assert bg.tiles[3][3].name == '3072.0_52224.0'
     assert bg.tiles[2][4].name == '4096.0_51200.0'
+
+
+def test_return_layer_names():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.return_layer_names() == ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.return_layer_names() == ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']
+
+
+def test_return_extents():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.return_extents() == [[0.0, 0.0], [2048.0, 2048.0]]
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.return_layer_names() == [[0.0, 0.0], [2048.0, 2048.0]]

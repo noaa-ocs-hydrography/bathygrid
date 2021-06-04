@@ -324,7 +324,7 @@ class BaseStorage(BathyGrid):
                 else:
                     raise NotImplementedError('{} is not a valid storage type'.format(self.storage_type))
                 for idx in range(self.tiles.size):
-                    subgrid_folder, row, col = self._get_tile_folder(self.output_folder, idx)
+                    subgrid_folder, row, col = self._get_tile_folder(root_folder, idx)
                     if os.path.exists(subgrid_folder):
                         newgrid = storage_cls()
                         newgrid.name = os.path.split(subgrid_folder)[1]

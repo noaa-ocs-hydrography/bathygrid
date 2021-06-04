@@ -37,39 +37,6 @@ class SRGrid(NumpyGrid):
             empty_struct[varname] = self.data[varname].values
         self.data = empty_struct
 
-    def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
-                         vertical_reference: str = None):
-        """
-        Update the bathygrid metadata for the new data
-
-        Parameters
-        ----------
-        container_name
-            the folder name of the converted data, equivalent to splitting the output_path variable in the kluster
-            dataset
-        file_list
-            list of multibeam files that exist in the data to add to the grid
-        epsg
-            epsg (or proj4 string) for the coordinate system of the data.  Proj4 only shows up when there is no valid
-            epsg
-        vertical_reference
-            vertical reference of the data
-        """
-
-        if file_list:
-            self.container[container_name] = file_list
-        else:
-            self.container[container_name] = ['Unknown']
-
-        if self.epsg and (self.epsg != int(epsg)):
-            raise ValueError('BathyGrid: Found existing coordinate system {}, new coordinate system {} must match'.format(self.epsg,
-                                                                                                                          epsg))
-        if self.vertical_reference and (self.vertical_reference != vertical_reference):
-            raise ValueError('BathyGrid: Found existing vertical reference {}, new vertical reference {} must match'.format(self.vertical_reference,
-                                                                                                                            vertical_reference))
-        self.epsg = int(epsg)
-        self.vertical_reference = vertical_reference
-
     def _validate_input_data(self):
         """
         Ensure you get a structured numpy array as the input dataset.  If dataset is an Xarray Dataset, we convert it to
@@ -362,7 +329,11 @@ class VRGridTile(SRGrid):
             empty BathyGrid for this origin / tile size
         """
 
+        if self.output_folder:  # necessary if a destination is set so child grids flush to disk
+            ofolder = os.path.join(self.output_folder, self.name)
+        else:  # grid is in memory only
+            ofolder = ''
         return NumpyGrid(min_x=tile_x_origin, min_y=tile_y_origin, max_x=tile_x_origin + self.tile_size,
                          max_y=tile_y_origin + self.tile_size, tile_size=self.subtile_size,
-                         set_extents_manually=True, output_folder=os.path.join(self.output_folder, self.name))
+                         set_extents_manually=True, output_folder=ofolder)
 

@@ -72,6 +72,23 @@ deepdata['tvu'] = tvu
 deepdata['thu'] = thu
 
 
+x = np.arange(800, 1200, 100, dtype=np.float64)
+y = np.arange(800, 1200, 100, dtype=np.float64)
+x, y = np.meshgrid(x, y)
+x = x.ravel()
+y = y.ravel()
+z = np.linspace(5, 30, num=x.size).astype(np.float32)
+tvu = np.linspace(1, 2, num=x.size).astype(np.float32)
+thu = np.linspace(0.5, 1, num=x.size).astype(np.float32)
+
+closedata = np.empty(len(x), dtype=dtyp)
+closedata['x'] = x
+closedata['y'] = y
+closedata['z'] = z
+closedata['tvu'] = tvu
+closedata['thu'] = thu
+
+
 def get_grid_data():
     depth = np.linspace(10, 20, 20)
     tvu = np.linspace(1, 2, 20)
