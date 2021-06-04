@@ -134,25 +134,21 @@ def test_SRGrid_get_layer_by_name():
     assert not bg.no_grid
     assert res == 1.0
     assert bg.data is None  # after adding we clear the point data to free memory
-    dpth = bg.get_layer_by_name('depth')
-    thu = bg.get_layer_by_name('horizontal_uncertainty')
-    tvu = bg.get_layer_by_name('vertical_uncertainty')
-    assert dpth.size == thu.size == tvu.size == 31457280
-    assert np.count_nonzero(~np.isnan(dpth)) == np.count_nonzero(~np.isnan(thu)) == np.count_nonzero(~np.isnan(tvu)) == 2500
-    assert dpth[848, 0] == 20.0
-    assert thu[848, 0] == 0.5
-    assert tvu[848, 0] == 1.0
+    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 31457280
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 2500
+    assert lyrs[0][848, 0] == 20.0
+    assert lyrs[1][848, 0] == 0.5
+    assert lyrs[2][848, 0] == 1.0
 
     res = bg.grid(resolution=128, clear_existing=True)
     assert res == 128.0
-    dpth = bg.get_layer_by_name('depth')
-    thu = bg.get_layer_by_name('horizontal_uncertainty')
-    tvu = bg.get_layer_by_name('vertical_uncertainty')
-    assert dpth.size == thu.size == tvu.size == 1920
-    assert np.count_nonzero(~np.isnan(dpth)) == np.count_nonzero(~np.isnan(thu)) == np.count_nonzero(~np.isnan(tvu)) == 1521
-    assert dpth[6, 0] == 20.002
-    assert thu[6, 0] == 0.5
-    assert tvu[6, 0] == 1.0
+    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 1920
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 1521
+    assert lyrs[0][6, 0] == 20.002
+    assert lyrs[1][6, 0] == 0.5
+    assert lyrs[2][6, 0] == 1.0
 
 
 def test_SRGrid_get_trimmed_layer():
@@ -163,8 +159,10 @@ def test_SRGrid_get_trimmed_layer():
 
     res = bg.grid(resolution=128, clear_existing=True)
     assert res == 128.0
-    dpth = bg.get_layer_by_name('depth')
-    dpth_trim, mins, maxs = bg.get_layer_trimmed('depth')
+    dpth = bg.get_layers_by_name('depth')
+    dpth = dpth[0]
+    dpth_trim, mins, maxs = bg.get_layers_trimmed('depth')
+    dpth_trim = dpth_trim[0]
 
     assert dpth.shape == (48, 40)
     assert np.count_nonzero(~np.isnan(dpth)) == 1521
@@ -246,15 +244,12 @@ def test_VRGridTile_variable_rez_grid():
     bg.grid()
     assert np.array_equal(bg.resolutions, np.array([32.0, 64.0, 128.0]))
 
-    depth_layers = [bg.get_layer_by_name('depth', res) for res in bg.resolutions]
-    thu_layers = [bg.get_layer_by_name('horizontal_uncertainty', res) for res in bg.resolutions]
-    tvu_layers = [bg.get_layer_by_name('vertical_uncertainty', res) for res in bg.resolutions]
-    assert depth_layers[0].shape == thu_layers[0].shape == tvu_layers[0].shape == (192, 192)
-    assert np.count_nonzero(~np.isnan(depth_layers[0])) == np.count_nonzero(~np.isnan(thu_layers[0])) == np.count_nonzero(~np.isnan(tvu_layers[0])) == 1099
-    assert depth_layers[1].shape == thu_layers[1].shape == tvu_layers[1].shape == (96, 96)
-    assert np.count_nonzero(~np.isnan(depth_layers[1])) == np.count_nonzero(~np.isnan(thu_layers[1])) == np.count_nonzero(~np.isnan(tvu_layers[1])) == 1264
-    assert depth_layers[2].shape == thu_layers[2].shape == tvu_layers[2].shape == (48, 48)
-    assert np.count_nonzero(~np.isnan(depth_layers[2])) == np.count_nonzero(~np.isnan(thu_layers[2])) == np.count_nonzero(~np.isnan(tvu_layers[2])) == 1200
+    expected_shape = [(192, 192), (96, 96), (48, 48)]
+    expected_real = [1099, 1264, 1200]
+    for cnt, resolution in enumerate(bg.resolutions):
+        layers = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'], resolution=resolution)
+        assert layers[0].shape == layers[1].shape == layers[2].shape == expected_shape[cnt]
+        assert np.count_nonzero(~np.isnan(layers[0])) == np.count_nonzero(~np.isnan(layers[1])) == np.count_nonzero(~np.isnan(layers[2])) == expected_real[cnt]
 
     assert bg.tiles.shape == (6, 6)
 

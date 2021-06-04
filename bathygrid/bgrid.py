@@ -5,6 +5,7 @@ from dask.array import Array
 from dask.distributed import wait, progress
 from typing import Union
 import matplotlib.pyplot as plt
+from typing import Union
 
 from bathygrid.grids import BaseGrid
 from bathygrid.tile import SRTile, Tile
@@ -351,7 +352,7 @@ class BathyGrid(BaseGrid):
 
         tile = self.tiles.flat[flat_index]
         if tile:
-            if self.existing_tile_mask:
+            if self.existing_tile_mask is not None:
                 self.existing_tile_mask.flat[flat_index] = False
             self.number_of_tiles -= 1
             self.tiles.flat[flat_index] = None
@@ -389,7 +390,7 @@ class BathyGrid(BaseGrid):
                 self.tiles = None
             self._save_grid()
 
-    def get_layer_by_name(self, layer: str = 'depth', resolution: float = None):
+    def get_layers_by_name(self, layer: Union[str, list] = 'depth', resolution: float = None):
         """
         Return the numpy 2d grid for the provided layer, resolution.  Will check to ensure that you have gridded at this
         resolution already.  Grid returned will have NaN values for empty spaces.
@@ -397,23 +398,25 @@ class BathyGrid(BaseGrid):
         Parameters
         ----------
         layer
-            string identifier for the layer to access, one of 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+            string identifier for the layer(s) to access, valid layers include 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
         resolution
             resolution of the layer we want to access
 
         Returns
         -------
-        np.ndarray
-            gridded data for the provided layer, resolution across all tiles
+        list
+            list of gridded data for each provided layer, resolution across all tiles
         """
 
+        if isinstance(layer, str):
+            layer = [layer]
         if self.no_grid:
             raise ValueError('BathyGrid: Grid is empty, gridding has not been run yet.')
         if not resolution:
             if len(self.resolutions) > 1:
                 raise ValueError('BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
             resolution = self.resolutions[0]
-        data = self._build_layer_grid(resolution)
+        data = [self._build_layer_grid(resolution) for lyr in layer]
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
                 col, row = self._tile_idx_to_row_col(cnt)
@@ -421,12 +424,15 @@ class BathyGrid(BaseGrid):
                 assert tile_cell_count.is_integer()
                 tile_cell_count = int(tile_cell_count)
                 data_col, data_row = col * tile_cell_count, row * tile_cell_count
-                newdata = tile.get_layer_by_name(layer, resolution)
-                if newdata is not None:
-                    data[data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = newdata
+                for cnt, lyr in enumerate(layer):
+                    newdata = tile.get_layers_by_name(lyr, resolution)
+                    if newdata is not None:
+                        if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
+                            newdata = newdata[0]
+                        data[cnt][data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = newdata
         return data
 
-    def get_layer_trimmed(self, layer: str = 'depth', resolution: float = None):
+    def get_layers_trimmed(self, layer: Union[str, list] = 'depth', resolution: float = None):
         """
         Get the layer indicated by the provided layername and trim to the minimum bounding box of real values in the
         layer.
@@ -440,16 +446,18 @@ class BathyGrid(BaseGrid):
 
         Returns
         -------
-        np.ndarray
-            2dim array of gridded layer trimmed to the minimum bounding box
+        list
+            list of 2dim array of gridded layer trimmed to the minimum bounding box
         list
             new mins to use
         list
             new maxs to use
         """
 
-        data = self.get_layer_by_name(layer, resolution)
-        notnan = ~np.isnan(data)
+        data = self.get_layers_by_name(layer, resolution)
+        dat = data[0]  # just use the first layer, the mins/maxs should be the same for all layers
+
+        notnan = ~np.isnan(dat)
         rows = np.any(notnan, axis=1)
         cols = np.any(notnan, axis=0)
         rmin, rmax = np.where(rows)[0][[0, -1]]
@@ -458,7 +466,10 @@ class BathyGrid(BaseGrid):
         rmax += 1
         cmax += 1
 
-        return data[rmin:rmax, cmin:cmax], [rmin, cmin], [rmax, cmax]
+        for cnt, dat in enumerate(data):
+            data[cnt] = dat[rmin:rmax, cmin:cmax]
+
+        return data, [rmin, cmin], [rmax, cmax]
 
     def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,
                       progress_bar: bool = True):
@@ -648,7 +659,7 @@ class BathyGrid(BaseGrid):
 
         return [[self.min_x, self.min_y], [self.max_x, self.max_y]]
 
-    def return_surf_xyz(self, layer: str = 'depth', resolution: float = None, cell_boundaries: bool = True):
+    def return_surf_xyz(self, layer: Union[str, list] = 'depth', resolution: float = None, cell_boundaries: bool = True):
         """
         Return the xyz grid values as well as an index for the valid nodes in the surface.  z is the gridded result that
         matches the provided layername
@@ -671,8 +682,6 @@ class BathyGrid(BaseGrid):
             numpy array, 1d y locations for the grid nodes
         np.ndarray
             numpy 2d array, 2d grid depth values
-        np.ndarray
-            numpy 2d array, boolean mask for valid nodes with depth
         list
             new minimum x,y coordinate for the trimmed layer
         list
@@ -685,15 +694,16 @@ class BathyGrid(BaseGrid):
             if len(self.resolutions) > 1:
                 raise ValueError('BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
             resolution = self.resolutions[0]
-        surf, new_mins, new_maxs = self.get_layer_trimmed(layer)
-        valid_nodes = ~np.isnan(surf)
+
+        surfs, new_mins, new_maxs = self.get_layers_trimmed(layer)
+
         if not cell_boundaries:  # get the node locations for each cell
             x = (np.arange(self.min_x, self.max_x, resolution) + resolution / 2)[new_mins[0]:new_maxs[0]]
             y = (np.arange(self.min_y, self.max_y, resolution) + resolution / 2)[new_mins[1]:new_maxs[1]]
         else:  # get the cell boundaries for each cell, will be one longer than the node locations option (this is what matplotlib pcolormesh wants)
             x = np.arange(self.min_x, self.max_x, resolution)[new_mins[0]:new_maxs[0] + 1]
             y = np.arange(self.min_y, self.max_y, resolution)[new_mins[1]:new_maxs[1] + 1]
-        return x, y, surf, valid_nodes, new_mins, new_maxs
+        return x, y, surfs, new_mins, new_maxs
 
 
 def _gridding_parallel(data_blob: list):

@@ -191,7 +191,7 @@ class SRTile(Tile):
             self._run_mean_grid(resolution)
         return resolution
 
-    def get_layer_by_name(self, layer: str = 'depth', resolution: float = None):
+    def get_layers_by_name(self, layer: str = 'depth', resolution: float = None):
         """
         Get the layer at the provided resolution with the provided resolution.
 

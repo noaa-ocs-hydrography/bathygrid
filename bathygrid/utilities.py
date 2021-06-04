@@ -5,6 +5,12 @@ from typing import Union
 from dask.distributed import get_client, Client
 import psutil
 
+import osgeo
+from osgeo import gdal
+from osgeo.osr import SpatialReference
+from pyproj.crs import CRS
+from pyproj.enums import WktVersion
+
 
 def dask_find_or_start_client(address: str = None, silent: bool = False):
     """
@@ -192,3 +198,157 @@ def print_progress_bar(iteration, total, prefix='Progress:', suffix='Complete', 
     # Print New Line on Complete
     if iteration == total:
         print()
+
+
+def pyproj_crs_to_osgeo(proj_crs: Union[CRS, int]):
+    """
+    Convert from the pyproj CRS object to osgeo SpatialReference
+
+    See https://pyproj4.github.io/pyproj/stable/crs_compatibility.html
+
+    Parameters
+    ----------
+    proj_crs
+        pyproj CRS or an integer epsg code
+
+    Returns
+    -------
+    SpatialReference
+        converted SpatialReference
+    """
+
+    if isinstance(proj_crs, int):
+        proj_crs = CRS.from_epsg(proj_crs)
+    osr_crs = SpatialReference()
+    if osgeo.version_info.major < 3:
+        osr_crs.ImportFromWkt(proj_crs.to_wkt(WktVersion.WKT1_GDAL))
+    else:
+        osr_crs.ImportFromWkt(proj_crs.to_wkt())
+    return osr_crs
+
+
+def crs_to_osgeo(input_crs: Union[CRS, str, int]):
+    """
+    Take in a CRS in several formats and returns an osr SpatialReference for use with GDAL/OGR
+
+    Supports pyproj CRS object, crs in Proj4 format, crs in Wkt format, epsg code as integer/string
+
+    Parameters
+    ----------
+    input_crs
+        input crs in one of the accepted forms
+
+    Returns
+    -------
+    SpatialReference
+        osr SpatialReference for the provided CRS
+    """
+
+    if isinstance(input_crs, CRS):
+        crs = pyproj_crs_to_osgeo(input_crs)
+    else:
+        crs = SpatialReference()
+        try:  # in case someone passes a str that is an epsg
+            epsg = int(input_crs)
+            err = crs.ImportFromEPSG(epsg)
+            if err:
+                raise ValueError('Error trying to ImportFromEPSG: {}'.format(epsg))
+        except ValueError:  # a wkt or proj4 is provided
+            err = crs.ImportFromWkt(input_crs)
+            if err:
+                err = crs.ImportFromProj4(input_crs)
+                if err:
+                    raise ValueError('{} is neither a valid Wkt or Proj4 string'.format(input_crs))
+    return crs
+
+
+def gdal_raster_create(output_raster: str, data: list, geo_transform: list, crs: Union[CRS, int], nodatavalue: float = 1000000.0,
+                       bandnames: tuple = (), driver: str = 'GTiff', transpose: bool = True, creation_options: list = []):
+    """
+    Build a gdal product from the provided data using the provided driver.  Can perform a Transpose on the provided
+    data to align with GDAL/Image standards.
+
+    Parameters
+    ----------
+    output_raster
+        path to the output file we are writing here
+    data
+        list of numpy ndarrays, generally something like [2dim depth, 2dim uncertainty].  Can just be [2dim depth]
+    geo_transform
+        gdal geotransform for the raster [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size]
+    crs
+        pyproj CRS or an integer epsg code
+    nodatavalue
+        nodatavalue to use in raster
+    bandnames
+        list of string identifiers, should match the length of the data provided
+    driver
+        name of gdal driver to get, ex: 'GTiff'
+    transpose
+        if True, performs Transpose on the provided data
+    creation_options
+        list of gdal creation options, mostly used for BAG metadata
+    """
+
+    gdal_driver = gdal.GetDriverByName(driver)
+    srs = pyproj_crs_to_osgeo(crs)
+
+    if transpose:
+        data = [d.T for d in data]
+    rows, cols = data[0].shape
+    no_bands = len(data)
+
+    dataset = gdal_driver.Create(output_raster, cols, rows, no_bands, gdal.GDT_Float32, creation_options)
+    dataset.SetGeoTransform(geo_transform)
+    dataset.SetProjection(srs.ExportToWkt())
+
+    for cnt, d in enumerate(data):
+        rband = dataset.GetRasterBand(cnt + 1)
+        if bandnames:
+            rband.SetDescription(bandnames[cnt])
+        rband.WriteArray(d)
+        if driver != 'GTiff':
+            rband.SetNoDataValue(nodatavalue)
+    if driver == 'GTiff':  # gtiff driver wants one no data value for all bands
+        dataset.GetRasterBand(1).SetNoDataValue(nodatavalue)
+    if driver != 'MEM':  # MEM driver relies on you returning the dataset for use
+        dataset = None
+    return dataset
+
+
+def return_gdal_version():
+    """
+    Parse the gdal VersionInfo() output to make it make sense in terms of major.minor.hotfix convention
+
+    '3000400' -> '3.0.4'
+
+    Returns
+    -------
+    str
+        gdal version
+    """
+
+    # vers = gdal.VersionInfo()
+    # maj = vers[0:2]
+    # if maj[1] == '0':
+    #     maj = int(maj[0])
+    # else:
+    #     maj = int(maj)
+    # min = vers[2:4]
+    # if min[1] == '0':
+    #     min = int(min[0])
+    # else:
+    #     min = int(min)
+    # hfix = vers[4:8]
+    # if hfix[2] == '0':
+    #     if hfix[1] == '0':
+    #         hfix = int(hfix[0])
+    #     else:
+    #         hfix = int(hfix[0:1])
+    # else:
+    #     hfix = int(hfix[0:2])
+    # return '{}.{}.{}'.format(maj, min, hfix)
+
+    # not sure how I got to the above answer, when you can just use gdal.__version__
+    #  I think it was for an old version of GDAL?  Leaving it just in case
+    return gdal.__version__
