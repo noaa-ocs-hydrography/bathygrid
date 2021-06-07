@@ -309,4 +309,4 @@ def test_return_extents():
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
-    assert bg.return_layer_names() == [[0.0, 0.0], [2048.0, 2048.0]]
+    assert bg.return_extents() == [[0.0, 0.0], [2048.0, 2048.0]]

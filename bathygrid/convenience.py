@@ -1,7 +1,7 @@
 import os
 from bathygrid.bgrid import BathyGrid
 from bathygrid.maingrid import SRGrid, VRGridTile
-from bathygrid.utilities import is_power_of_two
+from bathygrid.utilities import is_power_of_two, create_folder
 
 
 def _validate_load_path(folder_path: str):
@@ -35,15 +35,16 @@ def _validate_load_path(folder_path: str):
 
 
 def _validate_create_options(folder_path: str, grid_type: str, tile_size: float, subtile_size: float):
-    if folder_path and os.path.exists(folder_path):
-        if os.listdir(folder_path):
-            raise ValueError('Folder path {} exists and contains folders/files.  Please provide a folder path that does not exist or is empty'.format(folder_path))
+    fpath, fname = os.path.split(folder_path)
+    folderpath = create_folder(fpath, fname)
+
     if grid_type not in ['single_resolution', 'variable_resolution_tile']:
         raise ValueError("Grid type {} invalid, must be one of ['single_resolution', 'variable_resolution_tile']".format(grid_type))
     if not is_power_of_two(tile_size):
         raise ValueError('Tile size {} must be a power of two'.format(tile_size))
     if grid_type == 'variable_resolution_tile' and not is_power_of_two(subtile_size):
         raise ValueError('Sub tile size {} must be a power of two'.format(subtile_size))
+    return folderpath
 
 
 def load_grid(folder_path: str):
@@ -97,11 +98,11 @@ def create_grid(folder_path: str = '', grid_type: str = 'single_resolution', til
         one of the BathyGrid implementations, ex: SRGrid
     """
 
-    _validate_create_options(folder_path, grid_type, tile_size, subtile_size)
+    folderpath = _validate_create_options(folder_path, grid_type, tile_size, subtile_size)
     if grid_type == 'single_resolution':
-        grid_class = SRGrid(output_folder=folder_path, tile_size=tile_size)
+        grid_class = SRGrid(output_folder=folderpath, tile_size=tile_size)
     elif grid_type == 'variable_resolution_tile':
-        grid_class = VRGridTile(output_folder=folder_path, tile_size=tile_size, subtile_size=subtile_size)
+        grid_class = VRGridTile(output_folder=folderpath, tile_size=tile_size, subtile_size=subtile_size)
     else:
         raise NotImplementedError('{} is not a valid grid type'.format(grid_type))
     return grid_class

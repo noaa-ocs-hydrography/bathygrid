@@ -1,7 +1,7 @@
 import numpy as np
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
-from bathygrid.algorithms import nb_grid_mean
+from bathygrid.algorithms import nb_grid_mean, nb_grid_shoalest
 
 
 class Tile(TileGrid):
@@ -137,6 +137,18 @@ class SRTile(Tile):
         self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
         self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
+    def _run_shoalest_grid(self, resolution):
+        """
+        Run the shoalest algorithm on the Tile data
+        """
+
+        nb_grid_shoalest(self.data['z'], self.data['tvu'], self.data['thu'], self.cell_indices[resolution],
+                         self.cells[resolution]['depth'], self.cells[resolution]['vertical_uncertainty'],
+                         self.cells[resolution]['horizontal_uncertainty'])
+        self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
+        self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
+        self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
+
     def grid(self, algorithm: str, resolution: float, clear_existing: bool = False,  progress_bar: bool = False):
         """
         Grid the Tile data using the provided algorithm and resolution.  Stores the gridded data in the Tile
@@ -189,6 +201,8 @@ class SRTile(Tile):
                                                                                self.cell_edges_x[resolution], self.cell_edges_y[resolution])
         if algorithm == 'mean':
             self._run_mean_grid(resolution)
+        elif algorithm == 'shoalest':
+            self._run_shoalest_grid(resolution)
         return resolution
 
     def get_layers_by_name(self, layer: str = 'depth', resolution: float = None):
