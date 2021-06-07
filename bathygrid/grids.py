@@ -57,6 +57,16 @@ class BaseGrid(Grid):
             return True
         return False
 
+    @property
+    def points_count(self):
+        if self.is_empty:
+            return 0
+        point_count = 0
+        for tile in self.tiles.flat:
+            if tile:
+                point_count += tile.points_count
+        return point_count
+
     def _adjust_extents(self):
         """
         If this BathyGrid is allowed to grow, we extend the boundaries by integer increments of tile_size

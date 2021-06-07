@@ -24,12 +24,13 @@ def _validate_load_path(folder_path: str):
     if not os.path.exists(folder_path):
         raise IOError('Unable to find folder {}'.format(folder_path))
     subfolders = os.listdir(folder_path)
-    if len(subfolders) > 1:
-        raise IOError('Found multiple folders in {}, expected one root folder.  Found {}'.format(folder_path, subfolders))
     if len(subfolders) == 0:
         raise IOError('Found no root folders in {}, expected a root folder like "VRGridTile_Root"'.format(folder_path))
-    if subfolders[0] not in ['VRGridTile_Root', 'SRGrid_Root']:
-        raise ValueError('Root folder {} is not one of the valid root folders ["VRGridTile_Root", "SRGrid_Root"]'.format(subfolders[0]))
+    valid_subfolders = [fldr for fldr in subfolders if fldr in ['VRGridTile_Root', 'SRGrid_Root']]
+    if len(valid_subfolders) > 1:
+        raise IOError('Found multiple subfolders in {}, expected one root folder like "VRGridTile_Root"'.format(folder_path))
+    elif len(valid_subfolders) == 0:
+        raise IOError('Found no root folders in {}, expected a root folder like "VRGridTile_Root"'.format(folder_path))
     return os.path.join(folder_path, subfolders[0]), subfolders[0]
 
 

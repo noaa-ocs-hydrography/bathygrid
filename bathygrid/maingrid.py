@@ -51,7 +51,7 @@ class SRGrid(NumpyGrid):
         elif type(self.data) == xr.Dataset:
             if 'x' not in self.data:
                 raise ValueError('BathyGrid: xarray Dataset provided for data, but "x" or "y" not found in variable names')
-            if len(self.data.dims) > 1:
+            if self.data['z'].ndim > 1:
                 raise ValueError('BathyGrid: xarray Dataset provided for data, but found multiple dimensions, must be one dimensional: {}'.format(self.data.dims))
             self._convert_dataset()  # internally we just convert xarray dataset to numpy for ease of use
         else:
@@ -239,7 +239,7 @@ class SRGrid(NumpyGrid):
         else:
             resolutions = self.resolutions
         for res in resolutions:
-            resfile = basefile + '_{}.tiff'.format(res)
+            resfile = basefile + '_{}.tif'.format(res)
             data, geo_transform, bandnames = self._gdal_preprocessing(resolution=res, nodatavalue=nodatavalue,
                                                                       z_positive_up=z_positive_up)
             gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=bandnames,

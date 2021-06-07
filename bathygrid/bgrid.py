@@ -654,8 +654,8 @@ class BathyGrid(BaseGrid):
 
         for res in resolution:
             fig = plt.figure()
-            data = self.get_layer_by_name(layer, res)
-            plt.imshow(data, origin='lower')
+            data, mins, maxs = self.get_layers_trimmed(layer, res)
+            plt.imshow(data[0], origin='lower')
             plt.title('{}_{}'.format(layer, res))
 
     def return_layer_names(self):
@@ -730,7 +730,7 @@ class BathyGrid(BaseGrid):
                 raise ValueError('BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
             resolution = self.resolutions[0]
 
-        surfs, new_mins, new_maxs = self.get_layers_trimmed(layer)
+        surfs, new_mins, new_maxs = self.get_layers_trimmed(layer, resolution)
 
         if not cell_boundaries:  # get the node locations for each cell
             x = (np.arange(self.min_x, self.max_x, resolution) + resolution / 2)[new_mins[0]:new_maxs[0]]

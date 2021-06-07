@@ -1,10 +1,7 @@
-import numpy as np
 from pytest import approx
 
-from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.convenience import *
-from bathygrid.tile import Tile
 from test_data.test_data import closedata, get_test_path
 
 
@@ -33,6 +30,32 @@ def _expected_sr_data(bathygrid):
     assert bathygrid.vertical_reference == 'waterline'
     assert bathygrid.sub_type == 'srtile'
     assert bathygrid.storage_type == 'numpy'
+
+
+def _expected_srgrid_griddata(bathygrid):
+    assert bathygrid.mean_depth == 17.5
+    assert bathygrid.resolutions == np.array([1.0])
+
+    grid_tile = bathygrid.tiles[0][0]  # pull out random populated tile
+    assert grid_tile.algorithm == 'mean'
+    assert list(grid_tile.cells.keys()) == [1.0]
+    assert grid_tile.cell_edges_x[1.0].shape[0] == 1025
+    assert grid_tile.cell_edges_x[1.0][0].compute() == 0.0
+    assert grid_tile.cell_edges_x[1.0][-1].compute() == 1024.0
+    assert grid_tile.cell_edges_y[1.0].shape[0] == 1025
+    assert grid_tile.cell_edges_y[1.0][0].compute() == 0.0
+    assert grid_tile.cell_edges_y[1.0][-1].compute() == 1024.0
+    assert np.array_equal(grid_tile.cell_indices[1.0].compute(), np.array([820000, 820100, 820200, 922400, 922500, 922600, 1024800, 1024900, 1025000]))
+    assert grid_tile.data[0]['z'] == 5.0
+    assert grid_tile.data[0]['tvu'] == 1.0
+    assert grid_tile.data[0]['thu'] == 0.5
+    assert grid_tile.cells[1.0]['depth'].compute().flat[820000] == 5.0
+    assert grid_tile.cells[1.0]['vertical_uncertainty'].compute().flat[820000] == 1.0
+    assert grid_tile.cells[1.0]['horizontal_uncertainty'].compute().flat[820000] == 0.5
+    assert grid_tile.name == '0.0_0.0'
+    assert grid_tile.points_count == 9
+    assert grid_tile.height == 1024
+    assert grid_tile.width == 1024
 
 
 def _expected_vrgrid_data(bathygrid):
@@ -80,6 +103,34 @@ def _expected_vrgrid_data(bathygrid):
     assert os.path.exists(subgrid_tile_rootpath)
     assert os.path.exists(os.path.join(subgrid_tile_rootpath, 'data'))
     assert os.path.exists(os.path.join(subgrid_tile_rootpath, 'metadata.json'))
+
+
+def _expected_vrgrid_griddata(bathygrid):
+    assert bathygrid.mean_depth == 17.5
+    assert np.array_equal(bathygrid.resolutions, np.array([0.5, 1.0]))
+
+    subgrid = bathygrid.tiles[0][0]
+
+    subgrid_tile = bathygrid.tiles[0][0].tiles[7][7]  # pull out random populated tile
+    assert subgrid_tile.algorithm == 'mean'
+    assert list(subgrid_tile.cells.keys()) == [0.5]
+    assert subgrid_tile.cell_edges_x[0.5].shape[0] == 257
+    assert subgrid_tile.cell_edges_x[0.5][0].compute() == 896.0
+    assert subgrid_tile.cell_edges_x[0.5][-1].compute() == 1024.0
+    assert subgrid_tile.cell_edges_y[0.5].shape[0] == 257
+    assert subgrid_tile.cell_edges_y[0.5][0].compute() == 896.0
+    assert subgrid_tile.cell_edges_y[0.5][-1].compute() == 1024.0
+    assert np.array_equal(subgrid_tile.cell_indices[0.5].compute(), np.array([2056, 2256, 53256, 53456]))
+    assert approx(subgrid_tile.data[0]['z'], 0.001) == 13.333
+    assert approx(subgrid_tile.data[0]['tvu'], 0.001) == 1.333
+    assert approx(subgrid_tile.data[0]['thu'], 0.001) == 0.667
+    assert approx(subgrid_tile.cells[0.5]['depth'].compute().flat[2056]) == 13.333
+    assert approx(subgrid_tile.cells[0.5]['vertical_uncertainty'].compute().flat[2056]) == 1.333
+    assert approx(subgrid_tile.cells[0.5]['horizontal_uncertainty'].compute().flat[2056]) == 0.667
+    assert subgrid_tile.name == '896.0_896.0'
+    assert subgrid_tile.points_count == 4
+    assert subgrid_tile.height == 128
+    assert subgrid_tile.width == 128
 
 
 def test_basic_save():
@@ -135,15 +186,94 @@ def test_vrgrid_remove_points():
 def test_srgrid_after_load():
     bg = SRGrid(tile_size=1024, output_folder=get_test_path())
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=1)
     bg = load_grid(bg.output_folder)
     _expected_sr_data(bg)
+    _expected_srgrid_griddata(bg)
 
 
 def test_vrgrid_after_load():
     bg = VRGridTile(tile_size=1024, subtile_size=128, output_folder=get_test_path())
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
     bg = load_grid(bg.output_folder)
     _expected_vrgrid_data(bg)
+    _expected_vrgrid_griddata(bg)
+
+
+def test_srgrid_export_csv():
+    bg = SRGrid(tile_size=1024, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=1)
+    out_csv = os.path.join(bg.output_folder, 'test.csv')
+    bg.export(out_csv, export_format='csv')
+    new_csv = os.path.join(bg.output_folder, 'test_1.0.csv')
+    assert os.path.exists(new_csv)
+    assert os.stat(new_csv).st_size == 2688415
+
+
+def test_vrgrid_export_csv():
+    bg = VRGridTile(tile_size=1024, subtile_size=128, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    out_csv = os.path.join(bg.output_folder, 'test.csv')
+    bg.export(out_csv, export_format='csv')
+    new_csv = os.path.join(bg.output_folder, 'test_0.5.csv')
+    new_csv_two = os.path.join(bg.output_folder, 'test_1.0.csv')
+    assert os.path.exists(new_csv)
+    assert os.stat(new_csv).st_size == 7070383
+    assert os.path.exists(new_csv_two)
+    assert os.stat(new_csv_two).st_size == 9222
+
+
+def test_srgrid_export_tiff():
+    bg = SRGrid(tile_size=1024, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=1)
+    out_tif = os.path.join(bg.output_folder, 'outtiff.tif')
+    bg.export(out_tif, export_format='geotiff')
+    new_tif = os.path.join(bg.output_folder, 'outtiff_1.0.tif')
+    assert os.path.exists(new_tif)
+    assert os.stat(new_tif).st_size == 726004
+
+
+def test_vrgrid_export_tiff():
+    bg = VRGridTile(tile_size=1024, subtile_size=128, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    out_tif = os.path.join(bg.output_folder, 'outtiff.tif')
+    bg.export(out_tif, export_format='geotiff')
+    out_tif = os.path.join(bg.output_folder, 'outtiff_0.5.tif')
+    out_tif_two = os.path.join(bg.output_folder, 'outtiff_1.0.tif')
+    assert os.path.exists(out_tif)
+    assert os.stat(out_tif).st_size == 1930404
+    assert os.path.exists(out_tif_two)
+    assert os.stat(out_tif_two).st_size == 2998
+
+
+def test_srgrid_export_bag():
+    bg = SRGrid(tile_size=1024, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=1)
+    out_bag = os.path.join(bg.output_folder, 'outtiff.bag')
+    bg.export(out_bag, export_format='bag')
+    new_bag = os.path.join(bg.output_folder, 'outtiff_1.0.bag')
+    assert os.path.exists(new_bag)
+    assert os.stat(new_bag).st_size == 24753
+
+
+def test_vrgrid_export_bag():
+    bg = VRGridTile(tile_size=1024, subtile_size=128, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    out_bag = os.path.join(bg.output_folder, 'outtiff.bag')
+    bg.export(out_bag, export_format='bag')
+    new_bag = os.path.join(bg.output_folder, 'outtiff_0.5.bag')
+    new_bag_two = os.path.join(bg.output_folder, 'outtiff_1.0.bag')
+    assert os.path.exists(new_bag)
+    assert os.stat(new_bag).st_size == 27140
+    assert os.path.exists(new_bag_two)
+    assert os.stat(new_bag_two).st_size == 22592
 
 
 def test_clear_data():
