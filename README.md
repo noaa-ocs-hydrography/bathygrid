@@ -9,6 +9,28 @@ A tiled bathymetric point cloud gridding engine built in Python3.  Has the follo
 5. Export to csv, geotiff and BAG (requires GDAL, see maingrid.py)
 6. Add and remove points from the grid using tags (see bgrid.py, remove_points and add_points)
 
+## Installation
+
+(For Windows Users) Download and install Visual Studio Build Tools 2019 (If you have not already): [MSVC Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+
+Download and install conda (If you have not already): [conda installation](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
+
+Download and install git (If you have not already): [git installation](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+
+Some dependencies need to be installed from the conda-forge channel.  I have an example below of how to build this environment using conda.
+
+Perform these in order:
+
+`conda create -n bathygrid_test python=3.8.8 `
+
+`conda activate bathygrid_test `
+
+`conda install -c conda-forge gdal=3.2.1`
+
+`pip install git+https://github.com/noaa-ocs-hydrography/bathygrid.git#egg=bathygrid`
+
+##  Usage
+
 bathygrid currently requires a structured numpy array or xarray dataset with 'z', 'tvu', 'thu' data names:
 
 ```
