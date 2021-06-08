@@ -195,9 +195,6 @@ def print_progress_bar(iteration, total, prefix='Progress:', suffix='Complete', 
     filled_length = int(length * iteration // total)
     bar = fill * filled_length + '-' * (length - filled_length)
     print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=print_end)
-    # Print New Line on Complete
-    if iteration == total:
-        print()
 
 
 def pyproj_crs_to_osgeo(proj_crs: Union[CRS, int]):
