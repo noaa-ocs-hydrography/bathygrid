@@ -652,11 +652,13 @@ class BathyGrid(BaseGrid):
         else:
             resolution = [resolution]
 
+        plt.figure()
         for res in resolution:
-            fig = plt.figure()
-            data, mins, maxs = self.get_layers_trimmed(layer, res)
-            plt.imshow(data[0], origin='lower')
-            plt.title('{}_{}'.format(layer, res))
+            x, y, lyrdata, newmins, newmaxs = self.return_surf_xyz(layer, res, True)
+            lat2d, lon2d = np.meshgrid(y, x)
+            data_m = np.ma.array(lyrdata[0], mask=np.isnan(lyrdata[0]))
+            plt.pcolormesh(lon2d, lat2d, data_m.T)
+        plt.title('{}'.format(layer))
 
     def return_layer_names(self):
         """
@@ -707,7 +709,8 @@ class BathyGrid(BaseGrid):
             resolution of the layer we want to access
         cell_boundaries
             If True, the user wants the cell boundaries, not the node locations.  If False, returns the node locations
-            instead.  If you use matplotlib pcolormesh, you want this to be False.
+            instead.  If you want to export node locations to file, you want this to be false.  If you are building
+            a gdal object, you want this to be True.
 
         Returns
         -------
@@ -733,11 +736,11 @@ class BathyGrid(BaseGrid):
         surfs, new_mins, new_maxs = self.get_layers_trimmed(layer, resolution)
 
         if not cell_boundaries:  # get the node locations for each cell
-            x = (np.arange(self.min_x, self.max_x, resolution) + resolution / 2)[new_mins[0]:new_maxs[0]]
-            y = (np.arange(self.min_y, self.max_y, resolution) + resolution / 2)[new_mins[1]:new_maxs[1]]
+            x = (np.arange(self.min_x, self.max_x, resolution) + resolution / 2)[new_mins[1]:new_maxs[1]]
+            y = (np.arange(self.min_y, self.max_y, resolution) + resolution / 2)[new_mins[0]:new_maxs[0]]
         else:  # get the cell boundaries for each cell, will be one longer than the node locations option (this is what matplotlib pcolormesh wants)
-            x = np.arange(self.min_x, self.max_x, resolution)[new_mins[0]:new_maxs[0] + 1]
-            y = np.arange(self.min_y, self.max_y, resolution)[new_mins[1]:new_maxs[1] + 1]
+            x = np.arange(self.min_x, self.max_x, resolution)[new_mins[1]:new_maxs[1] + 1]
+            y = np.arange(self.min_y, self.max_y, resolution)[new_mins[0]:new_maxs[0] + 1]
         return x, y, surfs, new_mins, new_maxs
 
 

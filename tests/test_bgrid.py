@@ -4,7 +4,7 @@ from pytest import approx
 from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.tile import Tile
-from test_data.test_data import smalldata2, smalldata3, deepdata, closedata
+from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface
 
 
 def test_SRGrid_setup():
@@ -314,13 +314,14 @@ def test_return_extents():
 
 def test_gdal_preprocessing():
     bg = SRGrid(tile_size=1024)
-    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
-    bg.grid(resolution=8)
-    data, geo_transform, bandnames = bg._gdal_preprocessing(resolution=8.0, nodatavalue=np.nan, z_positive_up=False, layer_names=('depth',))
-    trimdata, mins, maxs = bg.get_layers_trimmed('depth', 8.0)
+    bg.add_points(smileyface, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+    data, geo_transform, bandnames = bg._gdal_preprocessing(resolution=64.0, nodatavalue=np.nan, z_positive_up=False,
+                                                            layer_names=['depth'])
+    trimdata, mins, maxs = bg.get_layers_trimmed('depth', 64.0)
 
     # data mirrored for gdal
-    assert data[0][0][-1] == trimdata[0][0][0]
+    assert data[0][0] == trimdata[0][0][0]
     assert data[0][-1][-1] == trimdata[0][-1][0]
     trimsize = (np.array(maxs) - np.array(mins)).tolist()
     assert trimsize[0] == data[0].shape[0]
