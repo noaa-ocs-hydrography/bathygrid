@@ -246,7 +246,7 @@ def test_vrgrid_export_tiff():
     out_tif = os.path.join(bg.output_folder, 'outtiff_0.5.tif')
     out_tif_two = os.path.join(bg.output_folder, 'outtiff_1.0.tif')
     assert os.path.exists(out_tif)
-    assert os.stat(out_tif).st_size == 1930404
+    assert os.stat(out_tif).st_size == 1931004
     assert os.path.exists(out_tif_two)
     assert os.stat(out_tif_two).st_size == 2998
 
@@ -259,7 +259,7 @@ def test_srgrid_export_bag():
     bg.export(out_bag, export_format='bag')
     new_bag = os.path.join(bg.output_folder, 'outtiff_1.0.bag')
     assert os.path.exists(new_bag)
-    assert os.stat(new_bag).st_size == 24753
+    assert os.stat(new_bag).st_size == 24749
 
 
 def test_vrgrid_export_bag():
@@ -271,7 +271,7 @@ def test_vrgrid_export_bag():
     new_bag = os.path.join(bg.output_folder, 'outtiff_0.5.bag')
     new_bag_two = os.path.join(bg.output_folder, 'outtiff_1.0.bag')
     assert os.path.exists(new_bag)
-    assert os.stat(new_bag).st_size == 27140
+    assert os.stat(new_bag).st_size == 27128
     assert os.path.exists(new_bag_two)
     assert os.stat(new_bag_two).st_size == 22592
 

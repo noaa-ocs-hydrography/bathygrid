@@ -213,7 +213,7 @@ class SRGrid(NumpyGrid):
             if lname == 'Depth' and z_positive_up:
                 lyrdata[cnt] = lyrdata[cnt] * -1
                 lname = 'Elevation'
-            lyrdata[cnt] = lyrdata[cnt][:, ::-1]
+            lyrdata[cnt] = np.fliplr(lyrdata[cnt].T)
             lyrdata[cnt][np.isnan(lyrdata[cnt])] = nodatavalue
             finalnames.append(lname)
         return lyrdata, geo_transform, layer_names

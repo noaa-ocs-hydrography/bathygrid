@@ -321,12 +321,12 @@ def test_gdal_preprocessing():
     trimdata, mins, maxs = bg.get_layers_trimmed('depth', 64.0)
 
     # data mirrored for gdal
-    assert data[0][0] == trimdata[0][0][0]
-    assert data[0][-1][-1] == trimdata[0][-1][0]
+    assert data[0][0][3] == trimdata[0][3][0]
+    assert data[0][-1][3] == trimdata[0][3][-1]
     trimsize = (np.array(maxs) - np.array(mins)).tolist()
-    assert trimsize[0] == data[0].shape[0]
-    assert trimsize[1] == data[0].shape[1]
+    assert trimsize[0] == data[0].shape[1]
+    assert trimsize[1] == data[0].shape[0]
     assert trimsize[0] == trimdata[0].shape[0]
     assert trimsize[1] == trimdata[0].shape[1]
-    assert geo_transform == [800.0, 8.0, 0, 1104.0, 0, -8.0]
+    assert geo_transform == [192.0, 64.0, 0, 832.0, 0, -64.0]
     assert bandnames == ['Depth']
