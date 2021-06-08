@@ -328,6 +328,8 @@ class BathyGrid(BaseGrid):
                     flat_tiles[ul] = self._build_tile(tilexorigin[ul], tileyorigin[ul])
                     x, y = self._tile_idx_to_origin_point(ul)
                     flat_tiles[ul].name = '{}_{}'.format(x, y)
+                if self.sub_type in ['srtile', 'quadtile']:
+                    self._load_tile_data_to_memory(flat_tiles[ul])
                 flat_tiles[ul].add_points(pts, container_name, progress_bar=False)
                 if flat_tiles[ul].is_empty:
                     flat_tiles[ul] = None
