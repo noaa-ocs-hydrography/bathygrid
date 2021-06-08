@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 import json
 from shutil import rmtree
@@ -19,6 +20,20 @@ bathygrid_float_to_str = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height',
 
 tile_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'container', 'name', 'algorithm']
 tile_float_to_str = ['min_y', 'min_x', 'max_y', 'max_x']
+
+
+def remove_with_permissionserror(folderpath: str, retries: int = 200, waittime: float = 0.1):
+    if os.path.exists(folderpath):
+        for attempt in range(1, retries + 1):
+            try:
+                rmtree(folderpath)
+                return
+            except PermissionError:
+                if attempt < retries:
+                    time.sleep(waittime)
+                else:
+                    print('WARNING: attempted {} retries at {} second interval, unable to complete process'.format(retries, waittime))
+                    rmtree(folderpath)
 
 
 class BaseStorage(BathyGrid):
@@ -182,7 +197,7 @@ class BaseStorage(BathyGrid):
         """
 
         if os.path.exists(tile_folder):
-            rmtree(tile_folder)
+            remove_with_permissionserror(tile_folder)
 
     def _clear_tile_contents(self, tile_folder: str):
         """
@@ -358,23 +373,23 @@ class NumpyGrid(BaseStorage):
         """
 
         if not only_grid:
-            rmtree(folderpath + '/data', ignore_errors=True)  # ignore errors so that this passes if this folder does not exist
+            remove_with_permissionserror(folderpath + '/data')
             da.to_npy_stack(folderpath + '/data', self._numpygrid_todask(tile.data))
         if not only_points:
             for resolution in tile.cells.keys():
-                rmtree(folderpath + '/cells_{}_depth'.format(resolution), ignore_errors=True)
+                remove_with_permissionserror(folderpath + '/cells_{}_depth'.format(resolution))
                 da.to_npy_stack(folderpath + '/cells_{}_depth'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['depth']))
-                rmtree(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), ignore_errors=True)
+                remove_with_permissionserror(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                 da.to_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['vertical_uncertainty']))
-                rmtree(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), ignore_errors=True)
+                remove_with_permissionserror(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
                 da.to_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['horizontal_uncertainty']))
-                rmtree(folderpath + '/cell_edges_x_{}'.format(resolution), ignore_errors=True)
+                remove_with_permissionserror(folderpath + '/cell_edges_x_{}'.format(resolution))
                 da.to_npy_stack(folderpath + '/cell_edges_x_{}'.format(resolution), self._numpygrid_todask(tile.cell_edges_x[resolution]))
-                rmtree(folderpath + '/cell_edges_y_{}'.format(resolution), ignore_errors=True)
+                remove_with_permissionserror(folderpath + '/cell_edges_y_{}'.format(resolution))
                 da.to_npy_stack(folderpath + '/cell_edges_y_{}'.format(resolution), self._numpygrid_todask(tile.cell_edges_y[resolution]))
         # both require saving the indices, which are updated on adding/removing points and when gridding
         for resolution in tile.cell_indices.keys():
-            rmtree(folderpath + '/cell_{}_indices'.format(resolution), ignore_errors=True)
+            remove_with_permissionserror(folderpath + '/cell_{}_indices'.format(resolution))
             da.to_npy_stack(folderpath + '/cell_{}_indices'.format(resolution), self._numpygrid_todask(tile.cell_indices[resolution]))
 
     def _load_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
@@ -413,11 +428,11 @@ class NumpyGrid(BaseStorage):
         See below.
         """
 
-        if not only_grid:
+        if not only_grid and tile.data is not None:
             tmpdata = np.array(tile.data)
             del tile.data
             tile.data = tmpdata
-        if not only_points:
+        if not only_points and tile.cells:
             cell_resolutions = list(tile.cells.keys())
             for resolution in cell_resolutions:
                 for lyrname in tile.cells[resolution]:
@@ -430,8 +445,9 @@ class NumpyGrid(BaseStorage):
                 tmpdata = np.array(tile.cell_edges_y[resolution])
                 del tile.cell_edges_y[resolution]
                 tile.cell_edges_y[resolution] = tmpdata
-        cellidx_resolutions = list(tile.cell_indices.keys())
-        for resolution in cellidx_resolutions:
-            tmpdata = np.array(tile.cell_indices[resolution])
-            del tile.cell_indices[resolution]
-            tile.cell_indices[resolution] = tmpdata
+        if tile.cell_indices:
+            cellidx_resolutions = list(tile.cell_indices.keys())
+            for resolution in cellidx_resolutions:
+                tmpdata = np.array(tile.cell_indices[resolution])
+                del tile.cell_indices[resolution]
+                tile.cell_indices[resolution] = tmpdata
