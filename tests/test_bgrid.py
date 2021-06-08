@@ -310,3 +310,22 @@ def test_return_extents():
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
     assert bg.return_extents() == [[0.0, 0.0], [2048.0, 2048.0]]
+
+
+def test_gdal_preprocessing():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=8)
+    data, geo_transform, bandnames = bg._gdal_preprocessing(resolution=8.0, nodatavalue=np.nan, z_positive_up=False, layer_names=('depth',))
+    trimdata, mins, maxs = bg.get_layers_trimmed('depth', 8.0)
+
+    # data mirrored for gdal
+    assert data[0][0][-1] == trimdata[0][0][0]
+    assert data[0][-1][-1] == trimdata[0][-1][0]
+    trimsize = (np.array(maxs) - np.array(mins)).tolist()
+    assert trimsize[0] == data[0].shape[0]
+    assert trimsize[1] == data[0].shape[1]
+    assert trimsize[0] == trimdata[0].shape[0]
+    assert trimsize[1] == trimdata[0].shape[1]
+    assert geo_transform == [800.0, 8.0, 0, 1104.0, 0, -8.0]
+    assert bandnames == ['Depth']

@@ -207,7 +207,7 @@ class SRGrid(NumpyGrid):
                          'horizontal_uncertainty': 'Horizontal Uncertainty'}
 
         x, y, lyrdata, newmins, newmaxs = self.return_surf_xyz(layer_names, resolution, True)
-        geo_transform = [np.float32(x[0]), resolution, 0, np.float32(y[0]), 0, -resolution]
+        geo_transform = [np.float32(x[0]), resolution, 0, np.float32(y[-1]), 0, -resolution]
         layer_names = [lyrtranslator[ln] for ln in layer_names]
         for cnt, lname in enumerate(layer_names):
             if lname == 'Depth' and z_positive_up:
