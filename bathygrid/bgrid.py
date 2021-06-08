@@ -143,7 +143,7 @@ class BathyGrid(BaseGrid):
         """
 
         if not self.mean_depth:
-            raise ValueError('SRTile: Unable to calculate resolution when mean_depth is None')
+            raise ValueError('Bathygrid: Unable to calculate resolution when mean_depth is None')
         dpth_keys = list(depth_resolution_lookup.keys())
         # get next positive value in keys of resolution lookup
         range_index = np.argmax((np.array(dpth_keys) - self.mean_depth) > 0)
@@ -527,16 +527,21 @@ class BathyGrid(BaseGrid):
             if progress_bar:
                 print_progress_bar(cnt + 1, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
             if tile:
-                if isinstance(tile, BathyGrid) and auto_resolution:
-                    resolution = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
+                if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
+                    rez = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
+                elif isinstance(tile, SRTile) and auto_resolution and self.name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
+                    rez = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
                 else:
-                    resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
-                if resolution not in self.resolutions:
-                    self.resolutions.append(resolution)
+                    rez = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
+                if isinstance(rez, float) or isinstance(rez, int):
+                    rez = [rez]
+                for rz in rez:
+                    if rz not in self.resolutions:
+                        self.resolutions.append(rz)
             if self.sub_type in ['srtile', 'quadtile']:
                 self._save_tile(tile, cnt, only_grid=True)
                 self._load_tile(cnt, only_grid=True)
-        self.resolutions = np.sort(np.unique(self.resolutions))
+        self.resolutions = np.sort(np.unique(self.resolutions)).tolist()
         self._save_grid()
 
     def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,

@@ -3,12 +3,16 @@ from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
 from bathygrid.algorithms import nb_grid_mean, nb_grid_shoalest
 
+depth_resolution_lookup = {20: 0.5, 40: 1.0, 60: 2.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 32.0, 1280: 64.0, 2560: 128.0,
+                           5120: 256.0, 10240: 512.0, 20480: 1024.0}
+
 
 class Tile(TileGrid):
     """
     Bathygrid is composed of multiple Tiles.  Each Tile manages its own point data and gridding.  This base tile contains
     some common methods for managing point data.
     """
+
     def __init__(self, min_x: float, min_y: float, size: float):
         super().__init__(min_x, min_y, size)
         self.algorithm = None
@@ -41,6 +45,34 @@ class SRTile(Tile):
 
     def __init__(self, min_x: float = 0.0, min_y: float = 0.0, size: float = 0.0):
         super().__init__(min_x, min_y, size)
+
+    @property
+    def mean_depth(self):
+        if self.data is None:
+            return 0
+        else:
+            return float(self.data['z'].mean())
+
+    def _calculate_resolution(self):
+        """
+        Use the depth resolution lookup to find the appropriate depth resolution band.  The lookup is the max depth and
+        the resolution that applies.
+
+        Returns
+        -------
+        float
+            resolution to use at the existing mean_depth
+        """
+
+        if self.data is None:
+            raise ValueError('SRTile: Unable to calculate resolution when there are no points in the tile')
+        dpth_keys = list(depth_resolution_lookup.keys())
+        # get next positive value in keys of resolution lookup
+        range_index = np.argmax((np.array(dpth_keys) - self.mean_depth) > 0)
+        calc_resolution = depth_resolution_lookup[dpth_keys[range_index]]
+        # ensure that resolution does not exceed the tile size for obvious reasons
+        clipped_rez = min(self.width, calc_resolution)
+        return float(clipped_rez)
 
     def add_points(self, data: np.ndarray, container: str, progress_bar: bool = False):
         """
@@ -149,7 +181,7 @@ class SRTile(Tile):
         self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
         self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
-    def grid(self, algorithm: str, resolution: float, clear_existing: bool = False,  progress_bar: bool = False):
+    def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, progress_bar: bool = False):
         """
         Grid the Tile data using the provided algorithm and resolution.  Stores the gridded data in the Tile
 
@@ -170,6 +202,8 @@ class SRTile(Tile):
             resolution of the grid in x/y units
         """
 
+        if resolution is None:
+            resolution = self._calculate_resolution()
         if not is_power_of_two(resolution):
             raise ValueError(f'Tile: Resolution must be a power of two, got {resolution}')
         if clear_existing:
@@ -181,24 +215,31 @@ class SRTile(Tile):
             self.algorithm = algorithm
             self.new_grid(resolution, algorithm)
         if resolution not in self.cell_indices:
-            self.cell_indices[resolution] = bin2d_with_indices(self.data['x'], self.data['y'], self.cell_edges_x[resolution],
+            self.cell_indices[resolution] = bin2d_with_indices(self.data['x'], self.data['y'],
+                                                               self.cell_edges_x[resolution],
                                                                self.cell_edges_y[resolution])
         else:
             self.data = np.array(self.data)
             if not isinstance(self.cell_indices[resolution], np.ndarray):
                 self.cell_indices[resolution] = self.cell_indices[resolution].compute()
-            self.cell_indices[resolution] = np.array(self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
+            self.cell_indices[resolution] = np.array(
+                self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
             if not isinstance(self.cells[resolution]['depth'], np.ndarray):
                 self.cells[resolution]['depth'] = self.cells[resolution]['depth'].compute()
-                self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution]['vertical_uncertainty'].compute()
-                self.cells[resolution]['horizontal_uncertainty'] = self.cells[resolution]['horizontal_uncertainty'].compute()
+                self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution][
+                    'vertical_uncertainty'].compute()
+                self.cells[resolution]['horizontal_uncertainty'] = self.cells[resolution][
+                    'horizontal_uncertainty'].compute()
             self.cells[resolution]['depth'] = np.array(self.cells[resolution]['depth'])
             self.cells[resolution]['vertical_uncertainty'] = np.array(self.cells[resolution]['vertical_uncertainty'])
-            self.cells[resolution]['horizontal_uncertainty'] = np.array(self.cells[resolution]['horizontal_uncertainty'])
+            self.cells[resolution]['horizontal_uncertainty'] = np.array(
+                self.cells[resolution]['horizontal_uncertainty'])
             new_points = self.cell_indices[resolution] == -1
             if new_points.any():
-                self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points], self.data['y'][new_points],
-                                                                               self.cell_edges_x[resolution], self.cell_edges_y[resolution])
+                self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points],
+                                                                               self.data['y'][new_points],
+                                                                               self.cell_edges_x[resolution],
+                                                                               self.cell_edges_y[resolution])
         if algorithm == 'mean':
             self._run_mean_grid(resolution)
         elif algorithm == 'shoalest':
@@ -226,7 +267,8 @@ class SRTile(Tile):
         if self.is_empty:
             return None
         if not resolution and len(list(self.cells.keys())) > 1:
-            raise ValueError('Tile: you must specify a resolution to return layer data when multiple resolutions are found')
+            raise ValueError(
+                'Tile: you must specify a resolution to return layer data when multiple resolutions are found')
         if resolution:
             if resolution not in list(self.cells.keys()):
                 return None
