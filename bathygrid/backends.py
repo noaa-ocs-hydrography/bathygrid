@@ -8,21 +8,17 @@ import dask.array as da
 from bathygrid.bgrid import BathyGrid
 from bathygrid.tile import Tile, SRTile
 from bathygrid.utilities import print_progress_bar
-
-
-bathygrid_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'container',
-                          'tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'existing_tile_mask',
-                          'maximum_tiles', 'number_of_tiles', 'can_grow', 'tile_size', 'mean_depth', 'epsg',
-                          'vertical_reference', 'resolutions', 'name', 'output_folder', 'sub_type', 'subtile_size',
-                          'storage_type']
-bathygrid_numpy_to_list = ['tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'resolutions', 'existing_tile_mask']
-bathygrid_float_to_str = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'mean_depth']
-
-tile_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'container', 'name', 'algorithm']
-tile_float_to_str = ['min_y', 'min_x', 'max_y', 'max_x']
+from bathygrid.grid_variables import bathygrid_desired_keys, bathygrid_float_to_str, bathygrid_numpy_to_list, \
+    tile_desired_keys, tile_float_to_str
 
 
 def remove_with_permissionserror(folderpath: str, retries: int = 200, waittime: float = 0.1):
+    """
+    We use dask to lazy load data from disk and then only load that data when necessary.  However, to update the data
+    on disk, we need to lazy load, load into memory, remove from disk, and then re-save it back to disk.  This process
+    is fast-ish, and sometimes the handles for the data on disk are still open when we go to remove from disk.  For that
+    reason, we need to use this function to wait until we dont get a permission error.
+    """
     if os.path.exists(folderpath):
         for attempt in range(1, retries + 1):
             try:
@@ -379,10 +375,12 @@ class NumpyGrid(BaseStorage):
             for resolution in tile.cells.keys():
                 remove_with_permissionserror(folderpath + '/cells_{}_depth'.format(resolution))
                 da.to_npy_stack(folderpath + '/cells_{}_depth'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['depth']))
-                remove_with_permissionserror(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
-                da.to_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['vertical_uncertainty']))
-                remove_with_permissionserror(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
-                da.to_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['horizontal_uncertainty']))
+                if 'vertical_uncertainty' in tile.cells[resolution]:
+                    remove_with_permissionserror(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
+                    da.to_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['vertical_uncertainty']))
+                if 'horizontal_uncertainty' in tile.cells[resolution]:
+                    remove_with_permissionserror(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
+                    da.to_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['horizontal_uncertainty']))
                 remove_with_permissionserror(folderpath + '/cell_edges_x_{}'.format(resolution))
                 da.to_npy_stack(folderpath + '/cell_edges_x_{}'.format(resolution), self._numpygrid_todask(tile.cell_edges_x[resolution]))
                 remove_with_permissionserror(folderpath + '/cell_edges_y_{}'.format(resolution))
@@ -410,8 +408,10 @@ class NumpyGrid(BaseStorage):
             for resolution in resolutions:
                 tile.cells[resolution] = {}
                 tile.cells[resolution]['depth'] = da.from_npy_stack(folderpath + '/cells_{}_depth'.format(resolution))
-                tile.cells[resolution]['vertical_uncertainty'] = da.from_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
-                tile.cells[resolution]['horizontal_uncertainty'] = da.from_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution)):
+                    tile.cells[resolution]['vertical_uncertainty'] = da.from_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
+                    tile.cells[resolution]['horizontal_uncertainty'] = da.from_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
                 tile.cell_edges_x[resolution] = da.from_npy_stack(folderpath + '/cell_edges_x_{}'.format(resolution))
                 tile.cell_edges_y[resolution] = da.from_npy_stack(folderpath + '/cell_edges_y_{}'.format(resolution))
         for resolution in resolutions:

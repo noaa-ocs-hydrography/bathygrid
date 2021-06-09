@@ -1,19 +1,15 @@
-import os
 import numpy as np
 import xarray as xr
 from dask.array import Array
 from dask.distributed import wait, progress
-from typing import Union
 import matplotlib.pyplot as plt
 from typing import Union
+from datetime import datetime
 
 from bathygrid.grids import BaseGrid
 from bathygrid.tile import SRTile, Tile
-from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar, create_folder
-
-
-depth_resolution_lookup = {20: 0.5, 40: 1.0, 60: 2.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 32.0, 1280: 64.0, 2560: 128.0,
-                           5120: 256.0, 10240: 512.0, 20480: 1024.0}
+from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar
+from bathygrid.grid_variables import depth_resolution_lookup
 
 
 class BathyGrid(BaseGrid):
@@ -40,10 +36,12 @@ class BathyGrid(BaseGrid):
         self.epsg = None  # epsg code
         self.vertical_reference = None  # string identifier for the vertical reference
         self.resolutions = []
+        self.container_timestamp = {}
 
         self.name = ''
         self.output_folder = output_folder
         self.subtile_size = 0
+        self.grid_algorithm = ''
         self.sub_type = 'srtile'
         self.storage_type = 'numpy'
         self.client = None
@@ -86,6 +84,33 @@ class BathyGrid(BaseGrid):
                     return True
         return False
 
+    @property
+    def cell_count(self):
+        """
+        Return the total cell count for each resolution, cells being the gridded values in each tile.
+        """
+        final_count = {}
+        for tile in self.tiles.flat:
+            if tile:
+                tcell = tile.cell_count
+                for rez in tcell:
+                    if rez in final_count:
+                        final_count[rez] += tcell[rez]
+                    else:
+                        final_count[rez] = tcell[rez]
+        return final_count
+
+    @property
+    def coverage_area(self):
+        """
+        Return the coverage area of this grid in the same units as the resolution (generally meters)
+        """
+        cellcount = self.cell_count
+        area = 0
+        for rez, cnt in cellcount.items():
+            area += cnt * rez
+        return area
+
     def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
                          vertical_reference: str = None):
         """
@@ -109,6 +134,7 @@ class BathyGrid(BaseGrid):
             self.container[container_name] = file_list
         else:
             self.container[container_name] = ['Unknown']
+        self.container_timestamp[container_name] = datetime.now().strftime('%Y%m%d_%H%M%S')
 
         if self.epsg and epsg:
             if self.epsg != int(epsg):
@@ -402,6 +428,7 @@ class BathyGrid(BaseGrid):
 
         if container_name in self.container:
             self.container.pop(container_name)
+            self.container_timestamp.pop(container_name)
             if not self.is_empty:
                 flat_tiles = self.tiles.ravel()
                 if progress_bar:
@@ -520,7 +547,6 @@ class BathyGrid(BaseGrid):
             if True, display a progress bar
         """
 
-        self.resolutions = []
         if progress_bar:
             print_progress_bar(0, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
         for cnt, tile in enumerate(self.tiles.flat):
@@ -571,7 +597,6 @@ class BathyGrid(BaseGrid):
         chunks_at_a_time = len(self.client.ncores())
         total_runs = int(np.ceil(len(self.tiles.flat) / 8))
         cur_run = 1
-        self.resolutions = []
 
         data_for_workers = []
         futs = []
@@ -580,7 +605,7 @@ class BathyGrid(BaseGrid):
             if tile:
                 if self.sub_type in ['srtile', 'quadtile']:
                     self._load_tile_data_to_memory(tile)
-                data_for_workers.append([tile, algorithm, resolution, clear_existing, auto_resolution])
+                data_for_workers.append([tile, algorithm, resolution, clear_existing, auto_resolution, self.name])
                 chunk_index += 1
                 if chunk_index == chunks_at_a_time:
                     print('processing surface: group {} out of {}'.format(cur_run, total_runs))
@@ -601,9 +626,15 @@ class BathyGrid(BaseGrid):
         results = self.client.gather(futs)
         results = [item for sublist in results for item in sublist]
         resolutions = [res[0] for res in results]
+        if isinstance(resolutions[0], list):  # this is true for vrgrids
+            resolutions = [r for subrez in resolutions for r in subrez]
         tiles = [res[1] for res in results]
         self.tiles[self.tiles != None] = tiles
-        self.resolutions = np.sort(np.unique(resolutions))
+        if self.sub_type in ['srtile', 'quadtile']:
+            for cnt, tile in enumerate(self.tiles.flat):
+                self._save_tile(tile, cnt, only_grid=True)
+                self._load_tile(cnt, only_grid=True)
+        self.resolutions = np.sort(np.unique(resolutions)).tolist()
         self._save_grid()
 
     def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, use_dask: bool = False,
@@ -619,13 +650,18 @@ class BathyGrid(BaseGrid):
         algorithm
             algorithm to grid by
         clear_existing
-            if True, will clear out any existing grids before generating this one
+            if True, will clear out any existing grids before generating this one.  Otherwise if the resolution exists,
+            will only run gridding on tiles that have new points.
         use_dask
             if True, will start a dask LocalCluster instance and perform the gridding in parallel
         progress_bar
             if True, display a progress bar
         """
 
+        if self.grid_algorithm and (self.grid_algorithm != algorithm) and not clear_existing:
+            raise ValueError('Bathygrid: gridding with {}, but {} is already used within the grid.  You must clear'.format(algorithm, self.grid_algorithm) +
+                             ' existing data first before using a different gridding algorithm')
+        self.grid_algorithm = algorithm
         if resolution is not None:
             resolution = float(resolution)
         if self.is_empty:
@@ -634,6 +670,8 @@ class BathyGrid(BaseGrid):
         if resolution is None:
             auto_resolution = True
             resolution = self._calculate_resolution()
+        self.resolutions = []
+
         if use_dask:
             self._grid_parallel(algorithm, resolution, clear_existing, auto_resolution=auto_resolution, progress_bar=progress_bar)
         else:
@@ -755,9 +793,11 @@ def _gridding_parallel(data_blob: list):
     """
     Gridding routine suited for running in parallel using the dask cluster.
     """
-    tile, algorithm, resolution, clear_existing, auto_resolution = data_blob
-    if isinstance(tile, BathyGrid) and auto_resolution:
-        resolution = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
+    tile, algorithm, resolution, clear_existing, auto_resolution, grid_name = data_blob
+    if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
+        rez = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
+    elif isinstance(tile, SRTile) and auto_resolution and grid_name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
+        rez = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
     else:
-        resolution = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
-    return resolution, tile
+        rez = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
+    return rez, tile

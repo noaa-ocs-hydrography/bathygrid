@@ -1,11 +1,10 @@
-import numpy as np
 from bathygrid.algorithms import *
 from test_data.test_data import get_grid_data
 
 
 def test_grid_mean():
     depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_grid_data()
-    nb_grid_mean(depth, tvu, thu, cell_indices, grid, tvugrid, thugrid)
+    nb_grid_mean(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
     dpthgrid = np.round(grid, 3)
     tvugrid = np.round(tvugrid, 3)
     thugrid = np.round(thugrid, 3)
@@ -18,7 +17,7 @@ def test_grid_mean():
 
 def test_grid_shoalest():
     depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_grid_data()
-    nb_grid_shoalest(depth, tvu, thu, cell_indices, grid, tvugrid, thugrid)
+    nb_grid_shoalest(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
     dpthgrid = np.round(grid, 3)
     tvugrid = np.round(tvugrid, 3)
     thugrid = np.round(thugrid, 3)

@@ -4,13 +4,14 @@ from pytest import approx
 from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.tile import Tile
-from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface
+from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata
 
 
 def test_SRGrid_setup():
     bg = SRGrid(tile_size=1024)
     assert bg.data is None
     assert bg.container == {}
+    assert bg.container_timestamp == {}
     assert bg.epsg is None
     assert bg.vertical_reference is None
 
@@ -26,6 +27,7 @@ def test_SRGrid_add_points():
         for til in row:
             assert isinstance(til, Tile)
     assert bg.container == {'test1': ['line1', 'line2']}
+    assert 'test1' in bg.container_timestamp
     assert bg.vertical_reference == 'waterline'
     assert bg.epsg == 26917
 
@@ -62,6 +64,7 @@ def test_SRGrid_remove_points():
 
     assert bg.data is None
     assert bg.container == {}
+    assert bg.container_timestamp == {}
     assert bg.tiles is None
 
 
@@ -86,6 +89,7 @@ def test_SRGrid_add_multiple_sources():
     assert tile.max_y == 50176.0
     assert tile.name == '0.0_49152.0'
     assert tile.container == {'test1': [0, 22]}
+    assert 'test1' in bg.container_timestamp
 
     # this tile has points from both containers
     tile = bg.tiles[3][3]
@@ -103,6 +107,8 @@ def test_SRGrid_add_multiple_sources():
     assert tile.max_y == 53248.0
     assert tile.name == '3072.0_52224.0'
     assert tile.container == {'test1': [0, 100], 'test2': [100, 200]}
+    assert 'test1' in bg.container_timestamp
+    assert 'test2' in bg.container_timestamp
 
     # removing points from this container will remove all test2 points from all tiles
     bg.remove_points('test2')
@@ -122,6 +128,7 @@ def test_SRGrid_add_multiple_sources():
     assert tile.max_y == 53248.0
     assert tile.name == '3072.0_52224.0'
     assert tile.container == {'test1': [0, 100]}
+    assert 'test1' in bg.container_timestamp
 
 
 def test_SRGrid_get_layer_by_name():
@@ -132,7 +139,7 @@ def test_SRGrid_get_layer_by_name():
 
     res = bg.grid()
     assert not bg.no_grid
-    assert res == 1.0
+    assert res == [1.0]
     assert bg.data is None  # after adding we clear the point data to free memory
     lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
     assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 31457280
@@ -142,7 +149,7 @@ def test_SRGrid_get_layer_by_name():
     assert lyrs[2][848, 0] == 1.0
 
     res = bg.grid(resolution=128, clear_existing=True)
-    assert res == 128.0
+    assert res == [128.0]
     lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
     assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 1920
     assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 1521
@@ -158,7 +165,7 @@ def test_SRGrid_get_trimmed_layer():
     assert bg.no_grid
 
     res = bg.grid(resolution=128, clear_existing=True)
-    assert res == 128.0
+    assert res == [128.0]
     dpth = bg.get_layers_by_name('depth')
     dpth = dpth[0]
     dpth_trim, mins, maxs = bg.get_layers_trimmed('depth')
@@ -186,6 +193,7 @@ def test_VRGridTile_add_points():
         for til in row:
             assert isinstance(til, BathyGrid)
     assert bg.container == {'test1': ['line1', 'line2']}
+    assert 'test1' in bg.container_timestamp
     assert bg.vertical_reference == 'waterline'
     assert bg.epsg == 26917
     assert bg.min_x == 0.0
@@ -245,7 +253,7 @@ def test_VRGridTile_variable_rez_grid():
     assert np.array_equal(bg.resolutions, np.array([32.0, 64.0, 128.0]))
 
     expected_shape = [(192, 192), (96, 96), (48, 48)]
-    expected_real = [1099, 1264, 1200]
+    expected_real = [471, 948, 1320]
     for cnt, resolution in enumerate(bg.resolutions):
         layers = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'], resolution=resolution)
         assert layers[0].shape == layers[1].shape == layers[2].shape == expected_shape[cnt]
@@ -253,14 +261,14 @@ def test_VRGridTile_variable_rez_grid():
 
     assert bg.tiles.shape == (6, 6)
 
-    assert np.array_equal(bg.tiles[0][0].resolutions, np.array([32.0]))
+    assert bg.tiles[0][0].resolutions == [32.0, 64.0]
     assert bg.tiles[0][0].tiles.shape == (8, 8)
     assert bg.tiles[0][0].tiles[0][0] is None
-    assert bg.tiles[0][0].tiles[7][7].cells[32.0]['depth'][1][1] == 626.0
-    assert bg.tiles[0][0].tiles[7][7].cells[32.0]['horizontal_uncertainty'][1][1] == 0.514
-    assert bg.tiles[0][0].tiles[7][7].cells[32.0]['vertical_uncertainty'][1][1] == 1.028
+    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['depth'][1][1] == 671.073
+    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['horizontal_uncertainty'][1][1] == 0.519
+    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['vertical_uncertainty'][1][1] == 1.038
 
-    assert np.array_equal(bg.tiles[3][3].resolutions, np.array([128.0]))
+    assert bg.tiles[3][3].resolutions == [128.0]
     assert bg.tiles[3][3].tiles.shape == (8, 8)
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['depth'][0][0] == 3412.555
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['horizontal_uncertainty'][0][0] == 0.824
@@ -300,6 +308,20 @@ def test_return_layer_names():
     assert bg.return_layer_names() == ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']
 
 
+def test_only_z_data():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.cell_count == {0.5: 16}
+    assert bg.coverage_area == 8
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.cell_count == {0.5: 10, 1.0: 6}
+    assert bg.coverage_area == 11.0
+
+
 def test_return_extents():
     bg = SRGrid(tile_size=1024)
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
@@ -310,6 +332,36 @@ def test_return_extents():
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
     assert bg.return_extents() == [[0.0, 0.0], [2048.0, 2048.0]]
+
+
+def test_cell_count():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.cell_count == {0.5: 16}
+    assert bg.coverage_area == 8
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.cell_count == {0.5: 10, 1.0: 6}
+    assert bg.coverage_area == 11.0
+
+
+def test_with_dask():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(use_dask=True)
+    assert bg.client
+    assert bg.cell_count == {0.5: 16}
+    assert bg.coverage_area == 8
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(use_dask=True)
+    assert bg.client
+    assert bg.cell_count == {0.5: 10, 1.0: 6}
+    assert bg.coverage_area == 11.0
 
 
 def test_gdal_preprocessing():

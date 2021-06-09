@@ -2,9 +2,7 @@ import numpy as np
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
 from bathygrid.algorithms import nb_grid_mean, nb_grid_shoalest
-
-depth_resolution_lookup = {20: 0.5, 40: 1.0, 60: 2.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 32.0, 1280: 64.0, 2560: 128.0,
-                           5120: 256.0, 10240: 512.0, 20480: 1024.0}
+from bathygrid.grid_variables import depth_resolution_lookup
 
 
 class Tile(TileGrid):
@@ -53,6 +51,13 @@ class SRTile(Tile):
         else:
             return float(self.data['z'].mean())
 
+    @property
+    def cell_count(self):
+        final_count = {}
+        for rez in self.cells:
+            final_count[rez] = int(np.count_nonzero(~np.isnan(self.cells[rez]['depth'])))
+        return final_count
+
     def _calculate_resolution(self):
         """
         Use the depth resolution lookup to find the appropriate depth resolution band.  The lookup is the max depth and
@@ -82,7 +87,7 @@ class SRTile(Tile):
         Parameters
         ----------
         data
-            numpy structured array of point data containing 'x', 'y', 'z', 'tvu', 'thu'
+            numpy structured array of point data containing 'x', 'y', 'z' (and optionally 'tvu', 'thu')
         container
             name of the source of the point data
         progress_bar
@@ -154,32 +159,56 @@ class SRTile(Tile):
         self.cells[resolution] = {}
         if algorithm == 'mean':
             self.cells[resolution]['depth'] = np.full(grid_shape, nodatavalue)
-            self.cells[resolution]['vertical_uncertainty'] = np.full(grid_shape, nodatavalue)
-            self.cells[resolution]['horizontal_uncertainty'] = np.full(grid_shape, nodatavalue)
+            if self.data is not None and 'tvu' in self.data.dtype.names:
+                self.cells[resolution]['vertical_uncertainty'] = np.full(grid_shape, nodatavalue)
+            if self.data is not None and 'thu' in self.data.dtype.names:
+                self.cells[resolution]['horizontal_uncertainty'] = np.full(grid_shape, nodatavalue)
 
-    def _run_mean_grid(self, resolution):
+    def _run_mean_grid(self, resolution: float):
         """
         Run the mean algorithm on the Tile data
         """
 
-        nb_grid_mean(self.data['z'], self.data['tvu'], self.data['thu'], self.cell_indices[resolution],
-                     self.cells[resolution]['depth'], self.cells[resolution]['vertical_uncertainty'],
-                     self.cells[resolution]['horizontal_uncertainty'])
+        vert_val = None
+        horiz_val = None
+        vert_grid = None
+        horiz_grid = None
+        if 'tvu' in self.data.dtype.names:
+            vert_val = self.data['tvu']
+            vert_grid = self.cells[resolution]['vertical_uncertainty']
+        if 'thu' in self.data.dtype.names:
+            horiz_val = self.data['thu']
+            horiz_grid = self.cells[resolution]['horizontal_uncertainty']
+        nb_grid_mean(self.data['z'], self.cell_indices[resolution], self.cells[resolution]['depth'],
+                     vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
-        self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
-        self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
+        if vert_val is not None:
+            self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
+        if horiz_val is not None:
+            self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
-    def _run_shoalest_grid(self, resolution):
+    def _run_shoalest_grid(self, resolution: float):
         """
         Run the shoalest algorithm on the Tile data
         """
 
-        nb_grid_shoalest(self.data['z'], self.data['tvu'], self.data['thu'], self.cell_indices[resolution],
-                         self.cells[resolution]['depth'], self.cells[resolution]['vertical_uncertainty'],
-                         self.cells[resolution]['horizontal_uncertainty'])
+        vert_val = None
+        horiz_val = None
+        vert_grid = None
+        horiz_grid = None
+        if 'tvu' in self.data.dtype.names:
+            vert_val = self.data['tvu']
+            vert_grid = self.cells[resolution]['vertical_uncertainty']
+        if 'thu' in self.data.dtype.names:
+            horiz_val = self.data['thu']
+            horiz_grid = self.cells[resolution]['horizontal_uncertainty']
+        nb_grid_shoalest(self.data['z'], self.cell_indices[resolution], self.cells[resolution]['depth'],
+                         vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
-        self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
-        self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
+        if vert_val is not None:
+            self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
+        if horiz_val is not None:
+            self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
     def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, progress_bar: bool = False):
         """
@@ -226,20 +255,23 @@ class SRTile(Tile):
                 self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
             if not isinstance(self.cells[resolution]['depth'], np.ndarray):
                 self.cells[resolution]['depth'] = self.cells[resolution]['depth'].compute()
-                self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution][
-                    'vertical_uncertainty'].compute()
-                self.cells[resolution]['horizontal_uncertainty'] = self.cells[resolution][
-                    'horizontal_uncertainty'].compute()
+                if 'vertical_uncertainty' in self.cells[resolution]:
+                    self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution]['vertical_uncertainty'].compute()
+                if 'horizontal_uncertainty' in self.cells[resolution]:
+                    self.cells[resolution]['horizontal_uncertainty'] = self.cells[resolution]['horizontal_uncertainty'].compute()
             self.cells[resolution]['depth'] = np.array(self.cells[resolution]['depth'])
-            self.cells[resolution]['vertical_uncertainty'] = np.array(self.cells[resolution]['vertical_uncertainty'])
-            self.cells[resolution]['horizontal_uncertainty'] = np.array(
-                self.cells[resolution]['horizontal_uncertainty'])
+            if 'vertical_uncertainty' in self.cells[resolution]:
+                self.cells[resolution]['vertical_uncertainty'] = np.array(self.cells[resolution]['vertical_uncertainty'])
+            if 'horizontal_uncertainty' in self.cells[resolution]:
+                self.cells[resolution]['horizontal_uncertainty'] = np.array(self.cells[resolution]['horizontal_uncertainty'])
             new_points = self.cell_indices[resolution] == -1
             if new_points.any():
                 self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points],
                                                                                self.data['y'][new_points],
                                                                                self.cell_edges_x[resolution],
                                                                                self.cell_edges_y[resolution])
+            else:  # there are no new points and this resolution already exists in the grid, so skip the gridding
+                return resolution
         if algorithm == 'mean':
             self._run_mean_grid(resolution)
         elif algorithm == 'shoalest':
@@ -267,13 +299,14 @@ class SRTile(Tile):
         if self.is_empty:
             return None
         if not resolution and len(list(self.cells.keys())) > 1:
-            raise ValueError(
-                'Tile: you must specify a resolution to return layer data when multiple resolutions are found')
+            raise ValueError('Tile {}: you must specify a resolution to return layer data when multiple resolutions are found'.format(self.name))
         if resolution:
             if resolution not in list(self.cells.keys()):
                 return None
         else:
             resolution = list(self.cells.keys())[0]
+        if layer not in self.cells[resolution]:
+            raise ValueError('Tile {}: layer {} not found for resolution {}'.format(self.name, layer, resolution))
         return self.cells[resolution][layer]
 
 

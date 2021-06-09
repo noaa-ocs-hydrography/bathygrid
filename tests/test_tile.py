@@ -41,8 +41,6 @@ def test_tile_newgrid():
     assert til.cell_edges_y[8][-1] == 1024
 
     assert np.isnan(til.cells[8]['depth'][0][0])
-    assert np.isnan(til.cells[8]['vertical_uncertainty'][0][0])
-    assert np.isnan(til.cells[8]['horizontal_uncertainty'][0][0])
 
 
 def test_tile_addpoints():

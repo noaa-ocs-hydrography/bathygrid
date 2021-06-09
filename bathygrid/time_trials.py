@@ -36,28 +36,43 @@ plt.pcolormesh(lon2d, lat2d, data_m.T, vmin=data_m.min(), vmax=data_m.max())
 def trial_data():
     number_of_points = 100000
     depth = np.linspace(10, 20, number_of_points)
-    unc = np.linspace(1, 2, number_of_points)
+    vunc = np.linspace(1, 2, number_of_points)
+    hunc = np.linspace(1, 2, number_of_points)
     cell_indices = np.random.randint(0, 10000, number_of_points)
     grid = np.full((100, 100), np.nan)
-    uncgrid = np.full((100, 100), np.nan)
-    return depth, unc, cell_indices, grid, uncgrid
+    vuncgrid = np.full((100, 100), np.nan)
+    huncgrid = np.full((100, 100), np.nan)
+    return depth, vunc, hunc, cell_indices, grid, vuncgrid, huncgrid
 
 
 def trial_grid_mean_numba():
-    depth, unc, cell_indices, grid, uncgrid = trial_data()
-    nb_grid_mean(depth, unc, cell_indices, grid, uncgrid)
+    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = trial_data()
+    nb_grid_mean(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
 
 
 def trial_grid_mean_numpy():
-    depth, unc, cell_indices, grid, uncgrid = trial_data()
-    np_grid_mean(depth, unc, cell_indices, grid, uncgrid)
+    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = trial_data()
+    np_grid_mean(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
+
+
+def trial_grid_shoal_numba():
+    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = trial_data()
+    nb_grid_shoalest(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
+
+
+def trial_grid_shoal_numpy():
+    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = trial_data()
+    np_grid_shoalest(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
 
 
 if __name__ == '__main__':
     import timeit
 
     trial_grid_mean_numba()  # run once to skip the overhead around import/compiling
+    trial_grid_shoal_numba()  # run once to skip the overhead around import/compiling
 
     print('Numba mean: {}'.format(timeit.timeit(trial_grid_mean_numba, number=2)))
     print('Numpy mean: {}'.format(timeit.timeit(trial_grid_mean_numpy, number=2)))
+    print('Numba shoal: {}'.format(timeit.timeit(trial_grid_shoal_numba, number=2)))
+    print('Numpy shoal: {}'.format(timeit.timeit(trial_grid_shoal_numpy, number=2)))
 

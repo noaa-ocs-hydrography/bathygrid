@@ -88,6 +88,18 @@ closedata['z'] = z
 closedata['tvu'] = tvu
 closedata['thu'] = thu
 
+x = np.arange(800, 1200, 100, dtype=np.float64)
+y = np.arange(800, 1200, 100, dtype=np.float64)
+x, y = np.meshgrid(x, y)
+x = x.ravel()
+y = y.ravel()
+z = np.linspace(5, 30, num=x.size).astype(np.float32)
+
+onlyzdata = np.empty(len(x), dtype=dtyp)
+onlyzdata['x'] = x
+onlyzdata['y'] = y
+onlyzdata['z'] = z
+
 x = np.array([200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 400, 600])
 y = np.array([600, 550, 500, 470, 440, 410, 400, 410, 440, 470, 500, 550, 600, 800, 800])
 x = x.ravel()

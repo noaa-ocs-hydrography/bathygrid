@@ -35,8 +35,11 @@ def _validate_load_path(folder_path: str):
 
 
 def _validate_create_options(folder_path: str, grid_type: str, tile_size: float, subtile_size: float):
-    fpath, fname = os.path.split(folder_path)
-    folderpath = create_folder(fpath, fname)
+    if folder_path:
+        fpath, fname = os.path.split(folder_path)
+        folderpath = create_folder(fpath, fname)
+    else:
+        folderpath = ''
 
     if grid_type not in ['single_resolution', 'variable_resolution_tile']:
         raise ValueError("Grid type {} invalid, must be one of ['single_resolution', 'variable_resolution_tile']".format(grid_type))

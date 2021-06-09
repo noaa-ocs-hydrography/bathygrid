@@ -31,7 +31,27 @@ Perform these in order:
 
 ##  Usage
 
-bathygrid currently requires a structured numpy array or xarray dataset with 'z', 'tvu', 'thu' data names:
+bathygrid currently requires a structured numpy array or xarray dataset with 'x', 'y', 'z' data names:
+
+```
+import numpy as np
+
+x = np.arange(800, 1200, 100, dtype=np.float64)
+y = np.arange(800, 1200, 100, dtype=np.float64)
+x, y = np.meshgrid(x, y)
+x = x.ravel()
+y = y.ravel()
+z = np.linspace(5, 30, num=x.size).astype(np.float32)
+
+dtyp = [('x', np.float64), ('y', np.float64), ('z', np.float32)]
+data = np.empty(len(x), dtype=dtyp)
+data['x'] = x
+data['y'] = y
+data['z'] = z
+```
+
+you can optionally provide 'tvu' (vertical uncertainty) and/or 'thu' (horizontal uncertainty) and these values will be
+gridded as well.
 
 ```
 import numpy as np
@@ -54,7 +74,7 @@ data['tvu'] = tvu
 data['thu'] = thu
 ```
 
-Or to illustrate the xarray Dataset example
+Or to illustrate the xarray Dataset example...
 
 ```
 import xarray as xr
@@ -130,7 +150,7 @@ the built in depth-to-resolution lookup tables.
 
 ```
 # you don't have to do this, but just to show you the lookup
-from bathygrid.bgrid import depth_resolution_lookup
+from bathygrid.grid_variables import depth_resolution_lookup
 depth_resolution_lookup
 Out: 
 {20: 0.5,
@@ -155,6 +175,16 @@ bg.resolutions
 Out: array([0.5, 1. ])
 ```
 
+You can optionally run the gridding in parallel with Dask with the use_dask argument
+
+```
+bg.grid(use_dask=True)
+Starting local cluster client...
+<Client: 'tcp://127.0.0.1:51474' processes=8 threads=16, memory=34.27 GB>
+processing surface: group 1 out of 1
+Out: [1.0]
+```
+
 And finally we can export the data to one of the accepted formats.
 
 ```
@@ -166,4 +196,15 @@ new_bag = os.path.join(bg.output_folder, 'outtiff_0.5.bag')
 new_bag_two = os.path.join(bg.output_folder, 'outtiff_1.0.bag')
 assert os.path.exists(new_bag)
 assert os.path.exists(new_bag_two)
+```
+
+You can also get some interesting metadata about the grid.
+
+```
+# Get the total number of cells in the variable resolution grid for each resolution
+bg.cell_count
+Out[11]: {0.5: 10, 1.0: 6}
+# and the total coverage area in the same units as the resolution provided (meters in this instance)
+bg.coverage_area
+Out[12]: 11.0
 ```
