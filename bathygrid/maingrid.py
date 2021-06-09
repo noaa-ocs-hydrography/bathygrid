@@ -296,6 +296,26 @@ class SRGrid(NumpyGrid):
             gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=bandnames,
                                driver='BAG', creation_options=bag_options)
 
+    def return_attribution(self):
+        """
+        Used in Kluster, return the important attribution of the class as a dict to display in the gui
+
+        Returns
+        -------
+        dict
+            class attributes in a presentable form
+        """
+        data = {'grid_folder': self.output_folder, 'name': self.name, 'type': type(self),
+                'grid_algorithm': self.grid_algorithm, 'epsg': self.epsg, 'vertical_reference': self.vertical_reference,
+                'height': self.height, 'width': self.width, 'minimum_x': self.min_x, 'maximum_x': self.max_x,
+                'minimum_y': self.min_y, 'maximum_y': self.max_y, 'tile_size': self.tile_size,
+                'subtile_size': self.subtile_size, 'tile_count': self.number_of_tiles, 'resolutions': self.resolutions,
+                'storage_type': self.storage_type}
+        for cont_name in self.container:
+            data['source_{}'.format(cont_name)] = {'time': self.container_timestamp[cont_name],
+                                                   'multibeam_lines': self.container[cont_name]}
+        return data
+
 
 class VRGridTile(SRGrid):
     """

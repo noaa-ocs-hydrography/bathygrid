@@ -2,7 +2,8 @@ import os, sys
 
 # BGRID and TILE
 # used to determine resolutions in grid tiles, depth versus resolution
-depth_resolution_lookup = {20: 0.5, 40: 1.0, 60: 2.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 32.0, 1280: 64.0, 2560: 128.0,
+#  ex: 0 to 20 meters is 0.5 m resolution, 20 to 40 meters is 1.0 meters, 40 to 80 meters is 4.0 meters resolution, etc.
+depth_resolution_lookup = {20: 0.5, 40: 1.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 32.0, 1280: 64.0, 2560: 128.0,
                            5120: 256.0, 10240: 512.0, 20480: 1024.0}
 
 # BACKEND
