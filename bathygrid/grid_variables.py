@@ -12,7 +12,7 @@ bathygrid_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height',
                           'tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'existing_tile_mask',
                           'maximum_tiles', 'number_of_tiles', 'can_grow', 'tile_size', 'mean_depth', 'epsg',
                           'vertical_reference', 'resolutions', 'name', 'output_folder', 'sub_type', 'subtile_size',
-                          'storage_type', 'grid_algorithm', 'container_timestamp']
+                          'storage_type', 'grid_algorithm', 'container_timestamp', 'grid_resolution']
 # these attributes are written to disk but need translation between numpy and list for JSON to work
 bathygrid_numpy_to_list = ['tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'existing_tile_mask']
 # these attributes are written to disk but need translation between float and string for JSON to work

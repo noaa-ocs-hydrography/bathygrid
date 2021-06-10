@@ -42,6 +42,7 @@ class BathyGrid(BaseGrid):
         self.output_folder = output_folder
         self.subtile_size = 0
         self.grid_algorithm = ''
+        self.grid_resolution = ''
         self.sub_type = 'srtile'
         self.storage_type = 'numpy'
         self.client = None
@@ -662,6 +663,7 @@ class BathyGrid(BaseGrid):
             raise ValueError('Bathygrid: gridding with {}, but {} is already used within the grid.  You must clear'.format(algorithm, self.grid_algorithm) +
                              ' existing data first before using a different gridding algorithm')
         self.grid_algorithm = algorithm
+        self.grid_resolution = resolution
         if resolution is not None:
             resolution = float(resolution)
         if self.is_empty:
@@ -669,6 +671,7 @@ class BathyGrid(BaseGrid):
         auto_resolution = False
         if resolution is None:
             auto_resolution = True
+            self.grid_resolution = 'AUTO'
             resolution = self._calculate_resolution()
         self.resolutions = []
 
@@ -787,6 +790,25 @@ class BathyGrid(BaseGrid):
             x = np.arange(self.min_x, self.max_x, resolution)[new_mins[1]:new_maxs[1] + 1]
             y = np.arange(self.min_y, self.max_y, resolution)[new_mins[0]:new_maxs[0] + 1]
         return x, y, surfs, new_mins, new_maxs
+
+    def return_unique_containers(self):
+        """
+        Containers are added to the bathygrid in chunks with indexes attached, like 'container_0', 'container_1'.  This
+        method will return only unique containers, i.e. ['container']
+
+        Returns
+        -------
+        list
+            list of unique container names
+        """
+
+        unique_cont = []
+        for cont in self.container:
+            idx = cont.split('_')[-1]
+            cont_without_index = cont[:len(idx) + 1]
+            if cont_without_index not in unique_cont:
+                unique_cont.append(cont_without_index)
+        return unique_cont
 
 
 def _gridding_parallel(data_blob: list):

@@ -305,15 +305,17 @@ class SRGrid(NumpyGrid):
         dict
             class attributes in a presentable form
         """
-        data = {'grid_folder': self.output_folder, 'name': self.name, 'type': type(self),
+        
+        data = {'grid_folder': self.output_folder, 'name': self.name, 'type': type(self), 'grid_resolution': self.grid_resolution,
                 'grid_algorithm': self.grid_algorithm, 'epsg': self.epsg, 'vertical_reference': self.vertical_reference,
                 'height': self.height, 'width': self.width, 'minimum_x': self.min_x, 'maximum_x': self.max_x,
                 'minimum_y': self.min_y, 'maximum_y': self.max_y, 'tile_size': self.tile_size,
                 'subtile_size': self.subtile_size, 'tile_count': self.number_of_tiles, 'resolutions': self.resolutions,
                 'storage_type': self.storage_type}
-        for cont_name in self.container:
-            data['source_{}'.format(cont_name)] = {'time': self.container_timestamp[cont_name],
-                                                   'multibeam_lines': self.container[cont_name]}
+        ucontainers = self.return_unique_containers()
+        for cont_name in ucontainers:
+            data['source_{}'.format(cont_name)] = {'time': self.container_timestamp[cont_name + '_0'],
+                                                   'multibeam_lines': self.container[cont_name + '_0']}
         return data
 
 
