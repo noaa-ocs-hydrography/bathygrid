@@ -409,7 +409,7 @@ class BathyGrid(BaseGrid):
 
         tile = self.tiles.flat[flat_index]
         if tile:
-            if self.existing_tile_mask is not None:
+            if self.existing_tile_mask is not None and self.existing_tile_mask.any():
                 self.existing_tile_mask.flat[flat_index] = False
             self.number_of_tiles -= 1
             self.tiles.flat[flat_index] = None
@@ -805,7 +805,7 @@ class BathyGrid(BaseGrid):
         unique_cont = []
         for cont in self.container:
             idx = cont.split('_')[-1]
-            cont_without_index = cont[:len(idx) + 1]
+            cont_without_index = cont[:-(len(idx) + 1)]
             if cont_without_index not in unique_cont:
                 unique_cont.append(cont_without_index)
         return unique_cont

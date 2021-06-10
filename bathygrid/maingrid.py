@@ -305,7 +305,7 @@ class SRGrid(NumpyGrid):
         dict
             class attributes in a presentable form
         """
-        
+
         data = {'grid_folder': self.output_folder, 'name': self.name, 'type': type(self), 'grid_resolution': self.grid_resolution,
                 'grid_algorithm': self.grid_algorithm, 'epsg': self.epsg, 'vertical_reference': self.vertical_reference,
                 'height': self.height, 'width': self.width, 'minimum_x': self.min_x, 'maximum_x': self.max_x,
