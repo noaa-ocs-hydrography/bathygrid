@@ -596,7 +596,7 @@ class BathyGrid(BaseGrid):
             self.client = dask_find_or_start_client()
 
         chunks_at_a_time = len(self.client.ncores())
-        total_runs = int(np.ceil(len(self.tiles.flat) / 8))
+        total_runs = int(np.ceil(len(self.tiles.flat) / 8)) - 1
         cur_run = 1
 
         data_for_workers = []
