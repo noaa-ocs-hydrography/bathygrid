@@ -208,3 +208,10 @@ Out[11]: {0.5: 10, 1.0: 6}
 bg.coverage_area
 Out[12]: 11.0
 ```
+
+To reload the grid later, use:
+
+```
+from bathygrid.convenience import load_grid
+bg = load_grid('output/folder/path')
+```
