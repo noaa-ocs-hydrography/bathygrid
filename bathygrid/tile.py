@@ -43,6 +43,7 @@ class SRTile(Tile):
 
     def __init__(self, min_x: float = 0.0, min_y: float = 0.0, size: float = 0.0):
         super().__init__(min_x, min_y, size)
+        self.point_count_changed = False
 
     @property
     def mean_depth(self):
@@ -108,6 +109,7 @@ class SRTile(Tile):
             self.data = np.concatenate([self.data, data])
             for resolution in self.cell_indices:
                 self.cell_indices[resolution] = np.append(self.cell_indices[resolution], np.full(data.shape, -1))
+        self.point_count_changed = True
 
     def remove_points(self, container, progress_bar: bool = False):
         """
@@ -133,6 +135,7 @@ class SRTile(Tile):
                 self.cell_indices[resolution] = self.cell_indices[resolution][msk]
             self.data = self.data[msk]
             self.container.pop(container)
+            self.point_count_changed = True
 
     def new_grid(self, resolution: float, algorithm: str, nodatavalue: float = np.nan):
         """
@@ -251,31 +254,32 @@ class SRTile(Tile):
             self.data = np.array(self.data)
             if not isinstance(self.cell_indices[resolution], np.ndarray):
                 self.cell_indices[resolution] = self.cell_indices[resolution].compute()
-            self.cell_indices[resolution] = np.array(
-                self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
+            self.cell_indices[resolution] = np.array(self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
             if not isinstance(self.cells[resolution]['depth'], np.ndarray):
                 self.cells[resolution]['depth'] = self.cells[resolution]['depth'].compute()
                 if 'vertical_uncertainty' in self.cells[resolution]:
                     self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution]['vertical_uncertainty'].compute()
                 if 'horizontal_uncertainty' in self.cells[resolution]:
                     self.cells[resolution]['horizontal_uncertainty'] = self.cells[resolution]['horizontal_uncertainty'].compute()
-            self.cells[resolution]['depth'] = np.array(self.cells[resolution]['depth'])
-            if 'vertical_uncertainty' in self.cells[resolution]:
-                self.cells[resolution]['vertical_uncertainty'] = np.array(self.cells[resolution]['vertical_uncertainty'])
-            if 'horizontal_uncertainty' in self.cells[resolution]:
-                self.cells[resolution]['horizontal_uncertainty'] = np.array(self.cells[resolution]['horizontal_uncertainty'])
             new_points = self.cell_indices[resolution] == -1
-            if new_points.any():
-                self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points],
-                                                                               self.data['y'][new_points],
-                                                                               self.cell_edges_x[resolution],
-                                                                               self.cell_edges_y[resolution])
+            if new_points.any() or self.point_count_changed:
+                self.cells[resolution]['depth'] = np.full(self.cells[resolution]['depth'].shape, np.nan)
+                if 'vertical_uncertainty' in self.cells[resolution]:
+                    self.cells[resolution]['vertical_uncertainty'] = np.full(self.cells[resolution]['vertical_uncertainty'].shape, np.nan)
+                if 'horizontal_uncertainty' in self.cells[resolution]:
+                    self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan)
+                if new_points.any():
+                    self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points],
+                                                                                   self.data['y'][new_points],
+                                                                                   self.cell_edges_x[resolution],
+                                                                                   self.cell_edges_y[resolution])
             else:  # there are no new points and this resolution already exists in the grid, so skip the gridding
                 return resolution
         if algorithm == 'mean':
             self._run_mean_grid(resolution)
         elif algorithm == 'shoalest':
             self._run_shoalest_grid(resolution)
+        self.point_count_changed = False
         return resolution
 
     def get_layers_by_name(self, layer: str = 'depth', resolution: float = None):

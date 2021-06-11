@@ -314,8 +314,20 @@ class SRGrid(NumpyGrid):
                 'storage_type': self.storage_type}
         ucontainers = self.return_unique_containers()
         for cont_name in ucontainers:
-            data['source_{}'.format(cont_name)] = {'time': self.container_timestamp[cont_name + '_0'],
-                                                   'multibeam_lines': self.container[cont_name + '_0']}
+            try:  # this works for kluster added containers, that have a suffix with an index
+                data['source_{}'.format(cont_name)] = {'time': self.container_timestamp[cont_name + '_0'],
+                                                       'multibeam_lines': self.container[cont_name + '_0']}
+            except KeyError:
+                try:  # this works for all other standard container names
+                    data['source_{}'.format(cont_name)] = {'time': self.container_timestamp[cont_name],
+                                                           'multibeam_lines': self.container[cont_name]}
+                except KeyError:
+                    nearest_cont_name = [nm for nm in self.container if nm.find(cont_name) != -1]
+                    if nearest_cont_name[0]:
+                        data['source_{}'.format(nearest_cont_name[0])] = {'time': self.container_timestamp[nearest_cont_name[0]],
+                                                                          'multibeam_lines': self.container[nearest_cont_name[0]]}
+                    else:
+                        raise ValueError('Unable to find entry for container {}, if you have a suffix with a _ and a number, bathygrid will interpret that as an index starting with 0'.format(cont_name))
         return data
 
 

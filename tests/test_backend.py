@@ -2,13 +2,13 @@ from pytest import approx
 
 from bathygrid.maingrid import *
 from bathygrid.convenience import *
-from test_data.test_data import closedata, get_test_path, onlyzdata
+from test_data.test_data import closedata, get_test_path, onlyzdata, smalldata
 
 
 def _expected_sr_data(bathygrid):
     rootpath = os.path.join(bathygrid.output_folder, bathygrid.name)
     assert os.path.exists(rootpath)
-    numtiles = bathygrid.tiles.size
+    numtiles = np.count_nonzero(bathygrid.tiles)
     fldrs = [fldr for fldr in os.listdir(rootpath) if os.path.isdir(os.path.join(rootpath, fldr))]
     assert len(fldrs) == numtiles
     assert os.path.exists(os.path.join(rootpath, 'metadata.json'))
@@ -190,6 +190,28 @@ def test_vrgrid_remove_points():
     assert os.path.exists(rootpath)
     fldrs = [fldr for fldr in os.listdir(rootpath) if os.path.isdir(os.path.join(rootpath, fldr))]
     assert len(fldrs) == 4
+
+
+def test_srgrid_grid_update():
+    bg = SRGrid(tile_size=1024, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smalldata, 'test2', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=1)
+    assert bg.cell_count == {1.0: 112}
+    bg.remove_points('test2')
+    bg.grid(resolution=1)
+    assert bg.cell_count == {1.0: 16}
+
+
+def test_vrgrid_grid_update():
+    bg = VRGridTile(tile_size=1024, subtile_size=128, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smalldata, 'test2', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.cell_count == {1.0: 106, 0.5: 6}
+    bg.remove_points('test2')
+    bg.grid()
+    assert bg.cell_count == {0.5: 10, 1.0: 10}
 
 
 def test_srgrid_after_load():

@@ -382,3 +382,49 @@ def test_gdal_preprocessing():
     assert trimsize[1] == trimdata[0].shape[1]
     assert geo_transform == [192.0, 64.0, 0, 832.0, 0, -64.0]
     assert bandnames == ['Depth']
+
+
+def test_return_unique_containers():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smileyface, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'em2040_123_09_07_2020_0', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'em2040_123_09_07_2020_1', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'sjkof_sdjkfh_skodf', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'someother_thing with stuff', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'thiswill_be_messedup_123', ['line1', 'line2'], 26917, 'waterline')
+    assert bg.return_unique_containers() == ['test1', 'em2040_123_09_07_2020', 'sjkof_sdjkfh_skodf',
+                                             'someother_thing with stuff', 'thiswill_be_messedup']
+
+
+def test_return_attribution():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smileyface, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'em2040_123_09_07_2020_0', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'em2040_123_09_07_2020_1', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'sjkof_sdjkfh_skodf', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'someother_thing with stuff', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'thiswill_be_messedup_123', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+    attr = bg.return_attribution()
+    assert attr['grid_folder'] == ''
+    assert attr['name'] == 'SRGrid_Root'
+    assert attr['type'] == SRGrid
+    assert attr['grid_resolution'] == 64
+    assert attr['grid_algorithm'] == 'mean'
+    assert attr['epsg'] == 26917
+    assert attr['vertical_reference'] == 'waterline'
+    assert attr['height'] == 6144.0
+    assert attr['width'] == 6144.0
+    assert attr['minimum_x'] == 0.0
+    assert attr['maximum_x'] == 6144.0
+    assert attr['minimum_y'] == 0.0
+    assert attr['maximum_y'] == 6144.0
+    assert attr['tile_size'] == 1024
+    assert attr['subtile_size'] == 0
+    assert attr['tile_count'] == 1
+    assert attr['resolutions'] == [64.0]
+    assert attr['storage_type'] == 'numpy'
+    assert attr['source_test1']['multibeam_lines'] == ['line1', 'line2']
+    assert attr['source_em2040_123_09_07_2020']['multibeam_lines'] == ['line1', 'line2']
+    assert attr['source_someother_thing with stuff']['multibeam_lines'] == ['line1', 'line2']
+    assert attr['source_thiswill_be_messedup_123']['multibeam_lines'] == ['line1', 'line2']

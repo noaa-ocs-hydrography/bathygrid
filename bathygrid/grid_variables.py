@@ -18,6 +18,6 @@ bathygrid_numpy_to_list = ['tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'ti
 # these attributes are written to disk but need translation between float and string for JSON to work
 bathygrid_float_to_str = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'mean_depth']
 # these are the attributes that are written to disk for tiles, see backend
-tile_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'container', 'name', 'algorithm']
+tile_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'container', 'name', 'algorithm', 'point_count_changed']
 # these are the tile attributes that need translation between float and string for JSON to work
 tile_float_to_str = ['min_y', 'min_x', 'max_y', 'max_x']

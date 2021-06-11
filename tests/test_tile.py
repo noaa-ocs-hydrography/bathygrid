@@ -41,6 +41,7 @@ def test_tile_newgrid():
     assert til.cell_edges_y[8][-1] == 1024
 
     assert np.isnan(til.cells[8]['depth'][0][0])
+    assert til.point_count_changed is False
 
 
 def test_tile_addpoints():
@@ -49,6 +50,7 @@ def test_tile_addpoints():
 
     assert np.array_equal(smalldata, til.data)
     assert til.container == {'test1': [0, 100]}
+    assert til.point_count_changed is True
 
 
 def test_tile_single_resolution():
@@ -56,6 +58,7 @@ def test_tile_single_resolution():
     til.add_points(smalldata, 'test1')
     til.grid('mean', 128.0)
 
+    assert til.point_count_changed is False
     assert til.cells[128.0]['depth'].shape == (1024 / 128, 1024 / 128)
     assert np.array_equal(til.cells[128.0]['depth'], np.array([[20.556, 20.707, 20.808, 20.96 , 21.111, 21.212, 21.313, 21.414],
                                                                [22.071, 22.222, 22.323, 22.475, 22.626, 22.727, 22.828, 22.929],
@@ -93,7 +96,9 @@ def test_cell_indices_modification():
     til = SRTile(0.0, 0.0, 1024)
     til.add_points(smalldata, 'test1')
     assert not til.cell_indices
+    assert til.point_count_changed is True
     til.grid('mean', 128.0)
+    assert til.point_count_changed is False
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,
@@ -101,6 +106,7 @@ def test_cell_indices_modification():
                                                              38, 39, 40, 40, 41, 42, 43, 43, 44, 45, 46, 47, 48, 48, 49, 50, 51,
                                                              51, 52, 53, 54, 55, 56, 56, 57, 58, 59, 59, 60, 61, 62, 63]))
     til.remove_points('test1')
+    assert til.point_count_changed is True
     assert not til.cell_indices[128.0].any()
     til.add_points(smalldata, 'test1')
     assert np.array_equal(til.cell_indices[128.0], np.array([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -110,6 +116,7 @@ def test_cell_indices_modification():
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                                              -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]))
     til.grid('mean', 128.0)
+    assert til.point_count_changed is False
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,

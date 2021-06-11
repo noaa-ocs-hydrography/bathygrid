@@ -804,10 +804,18 @@ class BathyGrid(BaseGrid):
 
         unique_cont = []
         for cont in self.container:
-            idx = cont.split('_')[-1]
-            cont_without_index = cont[:-(len(idx) + 1)]
-            if cont_without_index not in unique_cont:
-                unique_cont.append(cont_without_index)
+            groups = cont.split('_')
+            if len(groups) > 1:  # want support for kluster container names with count attached, ex: em2040_123_09_07_2010_0, em2040_123_09_07_2010_1
+                idx = groups[-1]
+                try:
+                    test_idx = int(idx)
+                    final_cont_name = cont[:-(len(idx) + 1)]
+                except:
+                    final_cont_name = cont
+            else:
+                final_cont_name = cont
+            if final_cont_name not in unique_cont:
+                unique_cont.append(final_cont_name)
         return unique_cont
 
 
