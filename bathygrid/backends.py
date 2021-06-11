@@ -1,35 +1,13 @@
 import os
-import time
 import numpy as np
 import json
-from shutil import rmtree
 import dask.array as da
 
 from bathygrid.bgrid import BathyGrid
 from bathygrid.tile import Tile, SRTile
-from bathygrid.utilities import print_progress_bar
+from bathygrid.utilities import print_progress_bar, remove_with_permissionserror
 from bathygrid.grid_variables import bathygrid_desired_keys, bathygrid_float_to_str, bathygrid_numpy_to_list, \
     tile_desired_keys, tile_float_to_str
-
-
-def remove_with_permissionserror(folderpath: str, retries: int = 200, waittime: float = 0.1):
-    """
-    We use dask to lazy load data from disk and then only load that data when necessary.  However, to update the data
-    on disk, we need to lazy load, load into memory, remove from disk, and then re-save it back to disk.  This process
-    is fast-ish, and sometimes the handles for the data on disk are still open when we go to remove from disk.  For that
-    reason, we need to use this function to wait until we dont get a permission error.
-    """
-    if os.path.exists(folderpath):
-        for attempt in range(1, retries + 1):
-            try:
-                rmtree(folderpath)
-                return
-            except PermissionError:
-                if attempt < retries:
-                    time.sleep(waittime)
-                else:
-                    print('WARNING: attempted {} retries at {} second interval, unable to complete process'.format(retries, waittime))
-                    rmtree(folderpath)
 
 
 class BaseStorage(BathyGrid):

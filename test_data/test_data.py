@@ -1,6 +1,6 @@
 import os
-from shutil import rmtree
 import numpy as np
+from bathygrid.utilities import remove_with_permissionserror
 
 
 x = np.arange(0, 1000, 100, dtype=np.float64)
@@ -131,7 +131,7 @@ def get_grid_data():
 def get_test_path():
     pth = os.path.join(os.path.dirname(__file__), 'grid')
     if os.path.exists(pth):
-        rmtree(pth)
+        remove_with_permissionserror(pth)
     return pth
 
 

@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Union
 from dask.distributed import get_client, Client
 import psutil
+from shutil import rmtree
+import time
 
 import osgeo
 from osgeo import gdal
@@ -352,3 +354,23 @@ def return_gdal_version():
     # not sure how I got to the above answer, when you can just use gdal.__version__
     #  I think it was for an old version of GDAL?  Leaving it just in case
     return gdal.__version__
+
+
+def remove_with_permissionserror(folderpath: str, retries: int = 200, waittime: float = 0.1):
+    """
+    We use dask to lazy load data from disk and then only load that data when necessary.  However, to update the data
+    on disk, we need to lazy load, load into memory, remove from disk, and then re-save it back to disk.  This process
+    is fast-ish, and sometimes the handles for the data on disk are still open when we go to remove from disk.  For that
+    reason, we need to use this function to wait until we dont get a permission error.
+    """
+    if os.path.exists(folderpath):
+        for attempt in range(1, retries + 1):
+            try:
+                rmtree(folderpath)
+                return
+            except PermissionError:
+                if attempt < retries:
+                    time.sleep(waittime)
+                else:
+                    print('WARNING: attempted {} retries at {} second interval, unable to complete process'.format(retries, waittime))
+                    rmtree(folderpath)
