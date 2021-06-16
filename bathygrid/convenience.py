@@ -31,7 +31,7 @@ def _validate_load_path(folder_path: str):
         raise IOError('Found multiple subfolders in {}, expected one root folder like "VRGridTile_Root"'.format(folder_path))
     elif len(valid_subfolders) == 0:
         raise IOError('Found no root folders in {}, expected a root folder like "VRGridTile_Root"'.format(folder_path))
-    return os.path.join(folder_path, subfolders[0]), subfolders[0]
+    return os.path.join(folder_path, valid_subfolders[0]), valid_subfolders[0]
 
 
 def _validate_create_options(folder_path: str, grid_type: str, tile_size: float, subtile_size: float):
