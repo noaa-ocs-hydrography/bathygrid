@@ -116,6 +116,24 @@ smileyface['z'] = z
 smileyface['tvu'] = tvu
 smileyface['thu'] = thu
 
+x = np.array([-73.0024, -73.0022, -73.0020, -73.0018, -73.0016, -73.0014, -73.0012, -73.0010, -73.0008, -73.0006,
+              -73.0004, -73.0002, -73.0000, -73.0016, -73.0008])
+y = np.array([30.0008, 30.0006, 30.0004, 30.0003, 30.0002, 30.0001, 30.00005, 30.0001, 30.0002, 30.0003,
+              30.0004, 30.0006, 30.0008, 30.0016, 30.0016])
+x = x.ravel()
+y = y.ravel()
+z = np.linspace(5, 30, num=x.size).astype(np.float32)
+tvu = np.linspace(1, 2, num=x.size).astype(np.float32)
+thu = np.linspace(0.5, 1, num=x.size).astype(np.float32)
+
+dtyp = [('x', np.float64), ('y', np.float64), ('z', np.float32), ('tvu', np.float32), ('thu', np.float32)]
+geographicsmileyface = np.empty(len(x), dtype=dtyp)
+geographicsmileyface['x'] = x
+geographicsmileyface['y'] = y
+geographicsmileyface['z'] = z
+geographicsmileyface['tvu'] = tvu
+geographicsmileyface['thu'] = thu
+
 
 def get_grid_data():
     depth = np.linspace(10, 20, 20)

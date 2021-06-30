@@ -110,14 +110,19 @@ def is_power_of_two(n: Union[int, float]):
     """
 
     if n > 1:
-        if n != int(n):
+        if abs(n - int(n)) > 0.00001:
             return False
         n = int(n)
         return (n != 0) and (n & (n - 1) == 0)
     elif n == 1:
         return True
     elif n > 0:
-        return is_power_of_two(1 / n)
+        invnum = 1 / n
+        # need to catch floating point issues.  This statement is to catch when n = 0.00001 or something similar that
+        #  does not return a whole number on inverse.  ex: 1/0.00001 = 99999.99999999999
+        if abs(round(invnum) - invnum) < 0.0000000001:
+            invnum = round(invnum)
+        return is_power_of_two(invnum)
     else:
         return False
 

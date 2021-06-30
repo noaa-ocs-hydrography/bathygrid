@@ -4,7 +4,7 @@ from pytest import approx
 from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.tile import Tile
-from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata
+from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata, geographicsmileyface
 
 
 def test_SRGrid_setup():
