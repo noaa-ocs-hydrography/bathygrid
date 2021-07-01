@@ -172,10 +172,10 @@ class SRTile(Tile):
         Run the mean algorithm on the Tile data
         """
 
-        vert_val = None
-        horiz_val = None
-        vert_grid = None
-        horiz_grid = None
+        vert_val = np.array([])
+        horiz_val = np.array([])
+        vert_grid = np.array([])
+        horiz_grid = np.array([])
         if 'tvu' in self.data.dtype.names:
             vert_val = self.data['tvu']
             vert_grid = self.cells[resolution]['vertical_uncertainty']
@@ -195,10 +195,10 @@ class SRTile(Tile):
         Run the shoalest algorithm on the Tile data
         """
 
-        vert_val = None
-        horiz_val = None
-        vert_grid = None
-        horiz_grid = None
+        vert_val = np.array([])
+        horiz_val = np.array([])
+        vert_grid = np.array([])
+        horiz_grid = np.array([])
         if 'tvu' in self.data.dtype.names:
             vert_val = self.data['tvu']
             vert_grid = self.cells[resolution]['vertical_uncertainty']
@@ -208,9 +208,9 @@ class SRTile(Tile):
         nb_grid_shoalest(self.data['z'], self.cell_indices[resolution], self.cells[resolution]['depth'],
                          vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
-        if vert_val is not None:
+        if vert_val.size > 0:
             self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
-        if horiz_val is not None:
+        if horiz_val.size > 0:
             self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
     def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, progress_bar: bool = False):

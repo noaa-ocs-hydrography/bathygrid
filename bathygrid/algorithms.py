@@ -3,16 +3,17 @@ import numpy as np
 
 
 @numba.jit(nopython=True, nogil=True)
-def nb_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = None, thu: np.array = None, tvu_grid: np.ndarray = None, thu_grid: np.ndarray = None):
+def nb_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = np.array([]),
+                 thu: np.array = np.array([]), tvu_grid: np.ndarray = np.array([]), thu_grid: np.ndarray = np.array([])):
     """
     Numba version of np_grid_mean
     """
 
     tvu_enabled = False
     thu_enabled = False
-    if tvu is not None and tvu_grid is not None:
+    if tvu.size > 0 and tvu_grid.size > 0:
         tvu_enabled = True
-    if thu is not None and thu_grid is not None:
+    if thu.size > 0 and thu_grid.size > 0:
         thu_enabled = True
 
     unique_indices = np.unique(cell_indices)
@@ -26,7 +27,8 @@ def nb_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu:
     return grid, tvu_grid, thu_grid
 
 
-def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = None, thu: np.array = None, tvu_grid: np.ndarray = None, thu_grid: np.ndarray = None):
+def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = np.array([]),
+                 thu: np.array = np.array([]), tvu_grid: np.ndarray = np.array([]), thu_grid: np.ndarray = np.array([])):
     """
     Arithmetic mean of each cell depth/uncertainty point values.
 
@@ -59,9 +61,9 @@ def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu:
 
     tvu_enabled = False
     thu_enabled = False
-    if tvu is not None and tvu_grid is not None:
+    if tvu.size > 0 and tvu_grid.size > 0:
         tvu_enabled = True
-    if thu is not None and thu_grid is not None:
+    if thu.size > 0 and thu_grid.size > 0:
         thu_enabled = True
 
     unique_indices = np.unique(cell_indices)
@@ -76,16 +78,17 @@ def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu:
 
 
 @numba.jit(nopython=True, nogil=True)
-def nb_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = None, thu: np.array = None, tvu_grid: np.ndarray = None, thu_grid: np.ndarray = None):
+def nb_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = np.array([]),
+                     thu: np.array = np.array([]), tvu_grid: np.ndarray = np.array([]), thu_grid: np.ndarray = np.array([])):
     """
     Numba version of np_grid_shoalest
     """
 
     tvu_enabled = False
     thu_enabled = False
-    if tvu is not None and tvu_grid is not None:
+    if tvu.size > 0 and tvu_grid.size > 0:
         tvu_enabled = True
-    if thu is not None and thu_grid is not None:
+    if thu.size > 0 and thu_grid.size > 0:
         thu_enabled = True
 
     unique_indices = np.unique(cell_indices)
@@ -100,7 +103,8 @@ def nb_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
     return grid, tvu_grid, thu_grid
 
 
-def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = None, thu: np.array = None, tvu_grid: np.ndarray = None, thu_grid: np.ndarray = None):
+def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = np.array([]),
+                     thu: np.array = np.array([]), tvu_grid: np.ndarray = np.array([]), thu_grid: np.ndarray = np.array([])):
     """
     Calculate the shoalest depth value of all points in each cell.  Take that depth/uncertainty value and use it for
     that grid cell.  Do that for all grid cells.
@@ -134,9 +138,9 @@ def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
 
     tvu_enabled = False
     thu_enabled = False
-    if tvu is not None and tvu_grid is not None:
+    if tvu.size > 0 and tvu_grid.size > 0:
         tvu_enabled = True
-    if thu is not None and thu_grid is not None:
+    if thu.size > 0 and thu_grid.size > 0:
         thu_enabled = True
 
     unique_indices = np.unique(cell_indices)

@@ -9,6 +9,9 @@ A tiled bathymetric point cloud gridding engine built in Python3.  Has the follo
 5. Export to csv, geotiff and BAG (requires GDAL, see maingrid.py)
 6. Add and remove points from the grid using tags (see bgrid.py, remove_points and add_points)
 
+WARNING: Currently expects coordinates in meters, as in projected UTM coordinates.  If you need geographic coordinate support,
+this would need to be added in. 
+
 ## Installation
 
 (For Windows Users) Download and install Visual Studio Build Tools 2019 (If you have not already): [MSVC Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
