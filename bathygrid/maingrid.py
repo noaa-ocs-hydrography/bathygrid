@@ -57,16 +57,6 @@ class SRGrid(NumpyGrid):
         else:
             raise ValueError('QuadTree: numpy structured array or dask array with "x" and "y" as variable must be provided')
 
-    def tiles_by_resolution(self, resolution: float):
-        """
-        Tile generator to get the geotransform and data from all tiles  
-        """
-        for row in range(self.tiles):
-            for col in range(self.tiles[row]):
-                tile = self.tiles[row][col]
-                geo = tile.get_geotransform(resolution)
-                yield geo, tile.cells[resolution]
-
     def save(self, folder_path: str = None, progress_bar: bool = True):
         """
         Recursive save for all BathyGrid/Tile objects within this class.
@@ -383,4 +373,3 @@ class VRGridTile(SRGrid):
         return NumpyGrid(min_x=tile_x_origin, min_y=tile_y_origin, max_x=tile_x_origin + self.tile_size,
                          max_y=tile_y_origin + self.tile_size, tile_size=self.subtile_size,
                          set_extents_manually=True, output_folder=ofolder)
-

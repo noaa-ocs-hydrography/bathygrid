@@ -267,10 +267,10 @@ class TileGrid(Grid):
 
     def get_geotransform(self, resolution: float):
         """
-        Return the GDAL geotransform for this tile
+        Return the GDAL geotransform for this tile and the tile count (which for the tile class, is just one)
         [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size]
         """
         if resolution in self.cells:
-            return [np.float32(self.min_x), resolution, 0, np.float32(self.max_y), 0, -resolution]
+            return [np.float32(self.min_x), resolution, 0, np.float32(self.max_y), 0, -resolution], 1
         else:
-            return None
+            return None, 0

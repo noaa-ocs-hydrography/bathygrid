@@ -174,5 +174,6 @@ def test_geotransform():
     til = SRTile(0.0, 0.0, 1024)
     til.add_points(smalldata, 'test1')
     til.grid('mean', 128.0)
-    geo = til.get_geotransform(128.0)
+    geo, cnt = til.get_geotransform(128.0)
     assert geo == [0.0, 128.0, 0, 1024.0, 0, -128.0]
+    assert cnt == 1

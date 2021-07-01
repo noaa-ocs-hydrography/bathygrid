@@ -114,20 +114,22 @@ class BathyGrid(BaseGrid):
 
     def get_geotransform(self, resolution: float):
         """
-        Return the summation of the geotransforms for all tiles in this grid.
+        Return the summation of the geotransforms for all tiles in this grid and the total tile count for this resolution
         [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size]
         """
         parent_transform = None
+        totaltiles = 0
         for tile in self.tiles.flat:
             if tile:
-                newgeo = tile.get_geotransform(resolution)
+                newgeo, tilecount = tile.get_geotransform(resolution)
                 if newgeo is not None:
+                    totaltiles += tilecount
                     if parent_transform is None:
                         parent_transform = newgeo
                     else:
                         parent_transform[0] = min(parent_transform[0], newgeo[0])
                         parent_transform[3] = max(parent_transform[3], newgeo[3])
-        return parent_transform
+        return parent_transform, totaltiles
 
     def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
                          vertical_reference: str = None):
@@ -464,6 +466,20 @@ class BathyGrid(BaseGrid):
             if self.is_empty:
                 self.tiles = None
             self._save_grid()
+
+    def get_tiles_by_resolution(self, resolution: float):
+        """
+        Tile generator to get the geotransform and data from all tiles
+        """
+        for row in range(len(self.tiles)):
+            for col in range(len(self.tiles[row])):
+                tile = self.tiles[row][col]
+                if tile:
+                    if isinstance(tile, BathyGrid):  # this is a vrgrid and tile is a sub grid
+                        tile.get_tiles_by_resolution(resolution)
+                    else:
+                        geo = tile.get_geotransform(resolution)
+                        yield geo, tile.cells[resolution]
 
     def get_layers_by_name(self, layer: Union[str, list] = 'depth', resolution: float = None):
         """

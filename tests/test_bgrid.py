@@ -434,9 +434,31 @@ def test_get_geotransform():
     bg = SRGrid(tile_size=1024)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(resolution=64)
-    bg.get_geotransform(64.0) == [0.0, 64.0, 0, 55296.0, 0, -64.0]
+    assert bg.get_geotransform(64.0) == [0.0, 64.0, 0, 55296.0, 0, -64.0]
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(resolution=64)
-    bg.get_geotransform(64.0) == [0.0, 64.0, 0, 54912.0, 0, -64.0]
+    assert bg.get_geotransform(64.0) == [0.0, 64.0, 0, 54912.0, 0, -64.0]
+
+
+def test_tile_iterator():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+
+    for geo, tdata in bg.get_tiles_by_resolution(64.0):
+        assert geo == [0.0, 64.0, 0, 50176.0, 0, -64.0]
+        assert geo == bg.tiles[0][0].get_geotransform(64.0)  # first tile
+        assert tdata['depth'].shape == (16, 16)
+        break
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+
+    for geo, tdata in bg.get_tiles_by_resolution(64.0):
+        assert geo == [0.0, 64.0, 0, 50048.0, 0, -64.0]
+        assert geo == bg.tiles[0][0].tiles[6][0].get_geotransform(64.0)  # first tile
+        assert tdata['depth'].shape == (2, 2)
+        break
