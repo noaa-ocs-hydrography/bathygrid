@@ -264,3 +264,13 @@ class TileGrid(Grid):
         self.width = size
         self.height = size
         self.name = f'{min_x}_{min_y}'
+
+    def get_geotransform(self, resolution: float):
+        """
+        Return the GDAL geotransform for this tile
+        [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size]
+        """
+        if resolution in self.cells:
+            return [np.float32(self.min_x), resolution, 0, np.float32(self.max_y), 0, -resolution]
+        else:
+            return None

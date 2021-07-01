@@ -177,17 +177,27 @@ class SRTile(Tile):
         vert_grid = np.array([])
         horiz_grid = np.array([])
         if 'tvu' in self.data.dtype.names:
-            vert_val = self.data['tvu']
+            if not isinstance(self.data, np.ndarray):
+                vert_val = self.data['tvu'].compute()
+            else:
+                vert_val = self.data['tvu']
             vert_grid = self.cells[resolution]['vertical_uncertainty']
         if 'thu' in self.data.dtype.names:
-            horiz_val = self.data['thu']
+            if not isinstance(self.data, np.ndarray):
+                horiz_val = self.data['thu'].compute()
+            else:
+                horiz_val = self.data['thu']
             horiz_grid = self.cells[resolution]['horizontal_uncertainty']
-        nb_grid_mean(self.data['z'], self.cell_indices[resolution], self.cells[resolution]['depth'],
+        if not isinstance(self.data, np.ndarray):
+            depth_val = self.data['z'].compute()
+        else:
+            depth_val = self.data['z']
+        nb_grid_mean(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'],
                      vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
-        if vert_val is not None:
+        if vert_val.size > 0:
             self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
-        if horiz_val is not None:
+        if horiz_val.size > 0:
             self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
     def _run_shoalest_grid(self, resolution: float):
@@ -200,12 +210,22 @@ class SRTile(Tile):
         vert_grid = np.array([])
         horiz_grid = np.array([])
         if 'tvu' in self.data.dtype.names:
-            vert_val = self.data['tvu']
+            if not isinstance(self.data, np.ndarray):
+                vert_val = self.data['tvu'].compute()
+            else:
+                vert_val = self.data['tvu']
             vert_grid = self.cells[resolution]['vertical_uncertainty']
         if 'thu' in self.data.dtype.names:
-            horiz_val = self.data['thu']
+            if not isinstance(self.data, np.ndarray):
+                horiz_val = self.data['thu'].compute()
+            else:
+                horiz_val = self.data['thu']
             horiz_grid = self.cells[resolution]['horizontal_uncertainty']
-        nb_grid_shoalest(self.data['z'], self.cell_indices[resolution], self.cells[resolution]['depth'],
+        if not isinstance(self.data, np.ndarray):
+            depth_val = self.data['z'].compute()
+        else:
+            depth_val = self.data['z']
+        nb_grid_shoalest(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'],
                          vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
         if vert_val.size > 0:
@@ -241,17 +261,19 @@ class SRTile(Tile):
         if clear_existing:
             self.clear_grid()
         if not isinstance(self.data, np.ndarray):
-            self.data = self.data.compute()
+            loaded_data = self.data.compute()
+        else:
+            loaded_data = self.data
 
         if resolution not in self.cells or algorithm != self.algorithm:
             self.algorithm = algorithm
             self.new_grid(resolution, algorithm)
         if resolution not in self.cell_indices:
-            self.cell_indices[resolution] = bin2d_with_indices(self.data['x'], self.data['y'],
+            self.cell_indices[resolution] = bin2d_with_indices(loaded_data['x'], loaded_data['y'],
                                                                self.cell_edges_x[resolution],
                                                                self.cell_edges_y[resolution])
         else:
-            self.data = np.array(self.data)
+            loaded_data = np.array(loaded_data)
             if not isinstance(self.cell_indices[resolution], np.ndarray):
                 self.cell_indices[resolution] = self.cell_indices[resolution].compute()
             self.cell_indices[resolution] = np.array(self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
@@ -269,8 +291,8 @@ class SRTile(Tile):
                 if 'horizontal_uncertainty' in self.cells[resolution]:
                     self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan)
                 if new_points.any():
-                    self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points],
-                                                                                   self.data['y'][new_points],
+                    self.cell_indices[resolution][new_points] = bin2d_with_indices(loaded_data['x'][new_points],
+                                                                                   loaded_data['y'][new_points],
                                                                                    self.cell_edges_x[resolution],
                                                                                    self.cell_edges_y[resolution])
             else:  # there are no new points and this resolution already exists in the grid, so skip the gridding

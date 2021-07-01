@@ -112,6 +112,23 @@ class BathyGrid(BaseGrid):
             area += cnt * rez
         return area
 
+    def get_geotransform(self, resolution: float):
+        """
+        Return the summation of the geotransforms for all tiles in this grid.
+        [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size]
+        """
+        parent_transform = None
+        for tile in self.tiles.flat:
+            if tile:
+                newgeo = tile.get_geotransform(resolution)
+                if newgeo is not None:
+                    if parent_transform is None:
+                        parent_transform = newgeo
+                    else:
+                        parent_transform[0] = min(parent_transform[0], newgeo[0])
+                        parent_transform[3] = max(parent_transform[3], newgeo[3])
+        return parent_transform
+
     def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
                          vertical_reference: str = None):
         """

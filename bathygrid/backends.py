@@ -378,7 +378,9 @@ class NumpyGrid(BaseStorage):
         for df in data_folders:
             sections = df.split('_')
             if sections[0] == 'cells':
-                resolutions.append(float(sections[1]))
+                res = float(sections[1])
+                if res not in resolutions:
+                    resolutions.append(res)
         resolutions.sort()
         if not only_grid:
             tile.data = da.from_npy_stack(folderpath + '/data')
@@ -413,7 +415,8 @@ class NumpyGrid(BaseStorage):
         if not only_points and tile.cells:
             cell_resolutions = list(tile.cells.keys())
             for resolution in cell_resolutions:
-                for lyrname in tile.cells[resolution]:
+                reload_layers = list(tile.cells[resolution].keys())
+                for lyrname in reload_layers:
                     tmpdata = np.array(tile.cells[resolution][lyrname])
                     del tile.cells[resolution][lyrname]
                     tile.cells[resolution][lyrname] = tmpdata

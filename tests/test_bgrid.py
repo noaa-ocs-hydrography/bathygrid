@@ -428,3 +428,15 @@ def test_return_attribution():
     assert attr['source_em2040_123_09_07_2020']['multibeam_lines'] == ['line1', 'line2']
     assert attr['source_someother_thing with stuff']['multibeam_lines'] == ['line1', 'line2']
     assert attr['source_thiswill_be_messedup_123']['multibeam_lines'] == ['line1', 'line2']
+
+
+def test_get_geotransform():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+    bg.get_geotransform(64.0) == [0.0, 64.0, 0, 55296.0, 0, -64.0]
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+    bg.get_geotransform(64.0) == [0.0, 64.0, 0, 54912.0, 0, -64.0]
