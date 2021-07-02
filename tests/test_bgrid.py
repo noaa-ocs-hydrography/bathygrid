@@ -5,6 +5,7 @@ from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.tile import Tile
 from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata, geographicsmileyface
+from bathygrid.utilities import utc_seconds_to_formatted_string, formatted_string_to_utc_seconds
 
 
 def test_SRGrid_setup():
@@ -398,12 +399,12 @@ def test_return_unique_containers():
 
 def test_return_attribution():
     bg = SRGrid(tile_size=1024)
-    bg.add_points(smileyface, 'test1', ['line1', 'line2'], 26917, 'waterline')
-    bg.add_points(smileyface, 'em2040_123_09_07_2020_0', ['line1', 'line2'], 26917, 'waterline')
-    bg.add_points(smileyface, 'em2040_123_09_07_2020_1', ['line1', 'line2'], 26917, 'waterline')
-    bg.add_points(smileyface, 'sjkof_sdjkfh_skodf', ['line1', 'line2'], 26917, 'waterline')
-    bg.add_points(smileyface, 'someother_thing with stuff', ['line1', 'line2'], 26917, 'waterline')
-    bg.add_points(smileyface, 'thiswill_be_messedup_123', ['line1', 'line2'], 26917, 'waterline')
+    bg.add_points(smileyface, 'test1', ['line1', 'line2'], 26917, 'waterline', min_time=1625235801.123, max_time=1625235901)
+    bg.add_points(smileyface, 'em2040_123_09_07_2020_0', ['line1', 'line2'], 26917, 'waterline', min_time=1625123546.123, max_time=1625129546)
+    bg.add_points(smileyface, 'em2040_123_09_07_2020_1', ['line1', 'line2'], 26917, 'waterline', min_time=1625465421.123, max_time=1625469421.15512)
+    bg.add_points(smileyface, 'sjkof_sdjkfh_skodf', ['line1', 'line2'], 26917, 'waterline', min_time=1625265801.123, max_time=1625275801)
+    bg.add_points(smileyface, 'someother_thing with stuff', ['line1', 'line2'], 26917, 'waterline', min_time=1625333333.123, max_time=1625333999)
+    bg.add_points(smileyface, 'thiswill_be_messedup_123', ['line1', 'line2'], 26917, 'waterline', min_time=1625444444.123, max_time=1625444445)
     bg.grid(resolution=64)
     attr = bg.return_attribution()
     assert attr['grid_folder'] == ''
@@ -428,18 +429,20 @@ def test_return_attribution():
     assert attr['source_em2040_123_09_07_2020']['multibeam_lines'] == ['line1', 'line2']
     assert attr['source_someother_thing with stuff']['multibeam_lines'] == ['line1', 'line2']
     assert attr['source_thiswill_be_messedup_123']['multibeam_lines'] == ['line1', 'line2']
+    assert attr['minimum_time_utc'] == utc_seconds_to_formatted_string(1625123546)
+    assert attr['maximum_time_utc'] == utc_seconds_to_formatted_string(1625469421)
 
 
 def test_get_geotransform():
     bg = SRGrid(tile_size=1024)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(resolution=64)
-    assert bg.get_geotransform(64.0) == [0.0, 64.0, 0, 55296.0, 0, -64.0]
+    assert bg.get_geotransform(64.0) == ([0.0, 64.0, 0, 55296.0, 0, -64.0], 30)
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(resolution=64)
-    assert bg.get_geotransform(64.0) == [0.0, 64.0, 0, 54912.0, 0, -64.0]
+    assert bg.get_geotransform(64.0) == ([0.0, 64.0, 0, 54912.0, 0, -64.0], 1521)
 
 
 def test_tile_iterator():
@@ -448,7 +451,7 @@ def test_tile_iterator():
     bg.grid(resolution=64)
 
     for geo, tdata in bg.get_tiles_by_resolution(64.0):
-        assert geo == [0.0, 64.0, 0, 50176.0, 0, -64.0]
+        assert geo == ([0.0, 64.0, 0, 50176.0, 0, -64.0], 1)
         assert geo == bg.tiles[0][0].get_geotransform(64.0)  # first tile
         assert tdata['depth'].shape == (16, 16)
         break
@@ -458,7 +461,7 @@ def test_tile_iterator():
     bg.grid(resolution=64)
 
     for geo, tdata in bg.get_tiles_by_resolution(64.0):
-        assert geo == [0.0, 64.0, 0, 50048.0, 0, -64.0]
+        assert geo == ([0.0, 64.0, 0, 50048.0, 0, -64.0], 1)
         assert geo == bg.tiles[0][0].tiles[6][0].get_geotransform(64.0)  # first tile
         assert tdata['depth'].shape == (2, 2)
         break

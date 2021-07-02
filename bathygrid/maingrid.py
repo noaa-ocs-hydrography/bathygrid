@@ -312,7 +312,8 @@ class SRGrid(NumpyGrid):
         data = {'grid_folder': self.output_folder, 'name': self.name, 'type': type(self), 'grid_resolution': self.grid_resolution,
                 'grid_algorithm': self.grid_algorithm, 'epsg': self.epsg, 'vertical_reference': self.vertical_reference,
                 'height': self.height, 'width': self.width, 'minimum_x': self.min_x, 'maximum_x': self.max_x,
-                'minimum_y': self.min_y, 'maximum_y': self.max_y, 'tile_size': self.tile_size,
+                'minimum_y': self.min_y, 'maximum_y': self.max_y, 'minimum_time_utc': self.min_time,
+                'maximum_time_utc': self.max_time, 'tile_size': self.tile_size,
                 'subtile_size': self.subtile_size, 'tile_count': self.number_of_tiles, 'resolutions': self.resolutions,
                 'storage_type': self.storage_type}
         ucontainers = self.return_unique_containers()

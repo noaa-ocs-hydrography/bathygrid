@@ -8,7 +8,8 @@ from datetime import datetime
 
 from bathygrid.grids import BaseGrid
 from bathygrid.tile import SRTile, Tile
-from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar
+from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar, \
+    utc_seconds_to_formatted_string, formatted_string_to_utc_seconds
 from bathygrid.grid_variables import depth_resolution_lookup
 
 
@@ -35,6 +36,8 @@ class BathyGrid(BaseGrid):
 
         self.epsg = None  # epsg code
         self.vertical_reference = None  # string identifier for the vertical reference
+        self.min_time = ''
+        self.max_time = ''
         self.resolutions = []
         self.container_timestamp = {}
 
@@ -132,7 +135,7 @@ class BathyGrid(BaseGrid):
         return parent_transform, totaltiles
 
     def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
-                         vertical_reference: str = None):
+                         vertical_reference: str = None, min_time: float = None, max_time: float = None):
         """
         Update the bathygrid metadata for the new data
 
@@ -148,7 +151,28 @@ class BathyGrid(BaseGrid):
             epsg
         vertical_reference
             vertical reference of the data
+        min_time
+            Optional, the minimum time in UTC seconds, only included if you want to track the total min max time of the
+            added data
+        max_time
+            Optional, the maximum time in UTC seconds, only included if you want to track the total min max time of the
+            added data
         """
+
+        if min_time:
+            min_time = int(min_time)
+            if self.min_time:
+                mintime = min(formatted_string_to_utc_seconds(self.min_time), min_time)
+                self.min_time = utc_seconds_to_formatted_string(mintime)
+            else:
+                self.min_time = utc_seconds_to_formatted_string(min_time)
+        if max_time:
+            max_time = int(max_time)
+            if self.max_time:
+                maxtime = max(formatted_string_to_utc_seconds(self.max_time), max_time)
+                self.max_time = utc_seconds_to_formatted_string(maxtime)
+            else:
+                self.max_time = utc_seconds_to_formatted_string(max_time)
 
         if file_list:
             self.container[container_name] = file_list
@@ -385,7 +409,8 @@ class BathyGrid(BaseGrid):
             self.number_of_tiles = np.count_nonzero(self.tiles != None)
 
     def add_points(self, data: Union[xr.Dataset, Array, np.ndarray], container_name: str, file_list: list = None,
-                   crs: int = None, vertical_reference: str = None, progress_bar: bool = True):
+                   crs: int = None, vertical_reference: str = None, min_time: float = None, max_time: float = None,
+                   progress_bar: bool = True):
         """
         Add new points to the grid.  Build new tiles to encapsulate those points, or add the points to existing tiles
         if they fall within existing tile boundaries.
@@ -404,6 +429,12 @@ class BathyGrid(BaseGrid):
             epsg
         vertical_reference
             vertical reference of the data
+        min_time
+            Optional, the minimum time in UTC seconds, only included if you want to track the total min max time of the
+            added data
+        max_time
+            Optional, the maximum time in UTC seconds, only included if you want to track the total min max time of the
+            added data
         progress_bar
             if True, display a progress bar
         """
@@ -414,7 +445,7 @@ class BathyGrid(BaseGrid):
             raise ValueError('{} is already within this bathygrid instance, remove_points first if you want to replace this data'.format(container_name))
         self.data = data
         self._validate_input_data()
-        self._update_metadata(container_name, file_list, crs, vertical_reference)
+        self._update_metadata(container_name, file_list, crs, vertical_reference, min_time, max_time)
         self._update_base_grid()
         self._update_tiles(container_name, progress_bar)
         self._update_mean_depth()

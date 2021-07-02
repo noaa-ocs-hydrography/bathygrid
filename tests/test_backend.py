@@ -3,6 +3,7 @@ from pytest import approx
 from bathygrid.maingrid import *
 from bathygrid.convenience import *
 from test_data.test_data import closedata, get_test_path, onlyzdata, smalldata
+from bathygrid.utilities import utc_seconds_to_formatted_string
 
 
 def _expected_sr_data(bathygrid):
@@ -343,6 +344,16 @@ def test_vrgrid_export_bag():
     assert os.stat(new_bag_two).st_size == 22592
 
 
+def test_srgrid_tracks_minmax_time():
+    bg = SRGrid(tile_size=1024, output_folder=get_test_path())
+    bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline', min_time=1625235801.123, max_time=1625235901)
+    bg.add_points(smalldata, 'test2', ['line1', 'line2'], 26917, 'waterline', min_time=1625465421.123, max_time=1625469421.15512)
+    bg.grid(resolution=1)
+    assert bg.min_time == utc_seconds_to_formatted_string(int(min(1625235801.123, 1625465421.123)))
+    assert bg.max_time == utc_seconds_to_formatted_string(int(max(1625235901, 1625469421.15512)))
+
+
 def test_clear_data():
     # one last call to clear data
     get_test_path()
+

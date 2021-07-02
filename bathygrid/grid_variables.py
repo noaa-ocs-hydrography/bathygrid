@@ -8,9 +8,9 @@ depth_resolution_lookup = {20: 0.5, 40: 1.0, 80: 4.0, 160: 8.0, 320: 16.0, 640: 
 
 # BACKEND
 # these are the attributes that are written to disk for grids, see backend
-bathygrid_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'container',
-                          'tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'existing_tile_mask',
-                          'maximum_tiles', 'number_of_tiles', 'can_grow', 'tile_size', 'mean_depth', 'epsg',
+bathygrid_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'min_time', 'max_time', 'width', 'height', 'origin_x',
+                          'origin_y', 'container', 'tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y',
+                          'existing_tile_mask', 'maximum_tiles', 'number_of_tiles', 'can_grow', 'tile_size', 'mean_depth', 'epsg',
                           'vertical_reference', 'resolutions', 'name', 'output_folder', 'sub_type', 'subtile_size',
                           'storage_type', 'grid_algorithm', 'container_timestamp', 'grid_resolution']
 # these attributes are written to disk but need translation between numpy and list for JSON to work

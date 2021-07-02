@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Union
 from dask.distributed import get_client, Client
 import psutil
@@ -379,3 +379,40 @@ def remove_with_permissionserror(folderpath: str, retries: int = 200, waittime: 
                 else:
                     print('WARNING: attempted {} retries at {} second interval, unable to complete process'.format(retries, waittime))
                     rmtree(folderpath)
+
+
+def utc_seconds_to_formatted_string(utctime: int):
+    """
+    Convert utctime in seconds to a formatted datetime string
+
+    Parameters
+    ----------
+    utctime
+        utc time in seconds
+
+    Returns
+    -------
+    str
+        datetime formatted string
+    """
+
+    fmttime = datetime.utcfromtimestamp(utctime).strftime('%m/%d/%Y %H:%M:%S')
+    return fmttime
+
+
+def formatted_string_to_utc_seconds(fmttime: str):
+    """
+    Convert formatted datetime string to utc seconds
+
+    Parameters
+    ----------
+    fmttime
+        datetime string
+
+    Returns
+    -------
+    int
+        utc time in seconds
+    """
+    utctime = int(datetime.strptime(fmttime, '%m/%d/%Y %H:%M:%S').replace(tzinfo=timezone.utc).timestamp())
+    return utctime
