@@ -220,7 +220,7 @@ class SRGrid(NumpyGrid):
             lyrdata[cnt] = np.fliplr(lyrdata[cnt].T)
             lyrdata[cnt][np.isnan(lyrdata[cnt])] = nodatavalue
             finalnames.append(lname)
-        return lyrdata, geo_transform, layer_names
+        return lyrdata, geo_transform, finalnames
 
     def _export_geotiff(self, filepath: str, z_positive_up: bool = True, resolution: float = None):
         """
@@ -302,11 +302,11 @@ class SRGrid(NumpyGrid):
             if os.path.exists(resfile):
                 r5 = h5py.File(resfile, 'a')
                 validdata = data[0] != nodatavalue
-                r5['BAG_root']['elevation'].attrs['Maximum Elevation Value'] = np.max(data[0][validdata])
-                r5['BAG_root']['elevation'].attrs['Minimum Elevation Value'] = np.min(data[0][validdata])
+                r5['BAG_root']['elevation'].attrs['Maximum Elevation Value'] = np.float32(np.max(data[0][validdata]))
+                r5['BAG_root']['elevation'].attrs['Minimum Elevation Value'] = np.float32(np.min(data[0][validdata]))
                 if len(data) == 2:
-                    r5['BAG_root']['uncertainty'].attrs['Maximum Uncertainty Value'] = np.max(data[1][validdata])
-                    r5['BAG_root']['uncertainty'].attrs['Minimum Uncertainty Value'] = np.min(data[1][validdata])
+                    r5['BAG_root']['uncertainty'].attrs['Maximum Uncertainty Value'] = np.float32(np.max(data[1][validdata]))
+                    r5['BAG_root']['uncertainty'].attrs['Minimum Uncertainty Value'] = np.float32(np.min(data[1][validdata]))
                 r5.close()
 
     def return_attribution(self):
