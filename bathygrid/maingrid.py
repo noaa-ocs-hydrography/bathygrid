@@ -3,6 +3,7 @@ import numpy as np
 from dask.array import Array
 import xarray as xr
 from datetime import datetime
+import h5py
 
 from bathygrid.backends import NumpyGrid
 from bathygrid.utilities import create_folder, gdal_raster_create, return_gdal_version
@@ -128,7 +129,7 @@ class SRGrid(NumpyGrid):
         elif fmt == 'geotiff':
             self._export_geotiff(output_path, z_positive_up=z_positive_up, resolution=resolution)
         elif fmt == 'bag':
-            self._export_bag(output_path, z_positive_up=z_positive_up, resolution=resolution, **kwargs)
+            self._export_bag(output_path, resolution=resolution, **kwargs)
         else:
             raise ValueError("bathygrid: Unrecognized format {}, must be one of ['csv', 'geotiff', 'bag']".format(fmt))
 
@@ -248,7 +249,7 @@ class SRGrid(NumpyGrid):
             gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=bandnames,
                                driver='GTiff')
 
-    def _export_bag(self, filepath: str, z_positive_up: bool = True, resolution: float = None, individual_name: str = 'unknown',
+    def _export_bag(self, filepath: str, resolution: float = None, individual_name: str = 'unknown',
                     organizational_name: str = 'unknown', position_name: str = 'unknown', attr_date: str = '',
                     vert_crs: str = '', abstract: str = '', process_step_description: str = '', attr_datetime: str = '',
                     restriction_code: str = 'otherRestrictions', other_constraints: str = 'unknown',
@@ -264,8 +265,6 @@ class SRGrid(NumpyGrid):
         ----------
         filepath
             folder to contain the exported data
-        z_positive_up
-            if True, will output bands with positive up convention
         resolution
             if provided, will only export the given resolution
         """
@@ -286,6 +285,7 @@ class SRGrid(NumpyGrid):
                        'VAR_OTHER_CONSTRAINTS=' + other_constraints, 'VAR_CLASSIFICATION=' + classification,
                        'VAR_SECURITY_USER_NOTE=' + security_user_note]
 
+        z_positive_up = True
         nodatavalue = 1000000.0
         basefile, baseext = os.path.splitext(filepath)
         if resolution is not None:
@@ -298,6 +298,16 @@ class SRGrid(NumpyGrid):
                                                                       z_positive_up=z_positive_up)
             gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=bandnames,
                                driver='BAG', creation_options=bag_options)
+            # gdal bag driver writes the band min/max to include the nodatavalue, we have to write the correct values ourselves
+            if os.path.exists(resfile):
+                r5 = h5py.File(resfile, 'a')
+                validdata = data[0] != nodatavalue
+                r5['BAG_root']['elevation'].attrs['Maximum Elevation Value'] = np.max(data[0][validdata])
+                r5['BAG_root']['elevation'].attrs['Minimum Elevation Value'] = np.min(data[0][validdata])
+                if len(data) == 2:
+                    r5['BAG_root']['uncertainty'].attrs['Maximum Uncertainty Value'] = np.max(data[1][validdata])
+                    r5['BAG_root']['uncertainty'].attrs['Minimum Uncertainty Value'] = np.min(data[1][validdata])
+                r5.close()
 
     def return_attribution(self):
         """

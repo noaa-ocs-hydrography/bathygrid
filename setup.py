@@ -21,6 +21,7 @@ REQUIRED = [
             'bokeh>=2.3.0',
             'dask>=2021.3.0',
             'distributed>=2021.3.0',
+            'h5py>=2.10.0',
             'fasteners>=0.14.1',
             'matplotlib>=3.3.3',  # >=3.3.3 required, FuncAnimation and Pyside2/matplotlib do not play well in 3.2.1
             'numba>=0.52.0',
