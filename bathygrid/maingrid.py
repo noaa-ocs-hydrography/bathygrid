@@ -299,6 +299,7 @@ class SRGrid(NumpyGrid):
             gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=bandnames,
                                driver='BAG', creation_options=bag_options)
             # gdal bag driver writes the band min/max to include the nodatavalue, we have to write the correct values ourselves
+            # should be resolved in GDAL 3.3.2, see OSGeo/gdal issue #4057
             if os.path.exists(resfile):
                 r5 = h5py.File(resfile, 'a')
                 validdata = data[0] != nodatavalue
