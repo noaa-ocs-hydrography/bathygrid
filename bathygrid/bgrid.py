@@ -635,6 +635,28 @@ class BathyGrid(BaseGrid):
         self.resolutions = np.sort(np.unique(self.resolutions)).tolist()
         self._save_grid()
 
+    def _grid_parallel_worker(self, data_for_workers: list, progress_bar: bool, tile_indices: list):
+        futs = []
+        data_for_workers = self.client.scatter(data_for_workers)
+        futs.append(self.client.map(_gridding_parallel, data_for_workers))
+        if progress_bar:
+            progress(futs, multi=False)
+        wait(futs)
+        results = self.client.gather(futs)
+        results = [item for sublist in results for item in sublist]
+        resolutions = [res[0] for res in results]
+        if isinstance(resolutions[0], list):  # this is true for vrgrids
+            resolutions = [r for subrez in resolutions for r in subrez]
+        tiles = [res[1] for res in results]
+        for result_tile, tidx in zip(tiles, tile_indices):
+            self.tiles.flat[tidx] = result_tile
+            if self.sub_type in ['srtile', 'quadtile']:
+                self._save_tile(result_tile, tidx, only_grid=True)
+                self._load_tile(tidx, only_grid=True)
+        for rez in resolutions:
+            if rez not in self.resolutions:
+                self.resolutions.append(rez)
+
     def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,
                        progress_bar: bool = True):
         """
@@ -660,46 +682,30 @@ class BathyGrid(BaseGrid):
             self.client = dask_find_or_start_client()
 
         chunks_at_a_time = len(self.client.ncores())
-        total_runs = int(np.ceil(len(self.tiles.flat) / 8)) - 1
+        total_runs = int(np.ceil(self.number_of_tiles / 8))
         cur_run = 1
 
+        self.resolutions = []
         data_for_workers = []
-        futs = []
         chunk_index = 0
-        for tile in self.tiles.flat:
+        tile_indices = []
+        for cnt, tile in enumerate(self.tiles.flat):
             if tile:
                 if self.sub_type in ['srtile', 'quadtile']:
                     self._load_tile_data_to_memory(tile)
+                tile_indices.append(cnt)
                 data_for_workers.append([tile, algorithm, resolution, clear_existing, auto_resolution, self.name])
                 chunk_index += 1
                 if chunk_index == chunks_at_a_time:
                     print('processing surface: group {} out of {}'.format(cur_run, total_runs))
                     cur_run += 1
                     chunk_index = 0
-                    data_for_workers = self.client.scatter(data_for_workers)
-                    futs.append(self.client.map(_gridding_parallel, data_for_workers))
-                    data_for_workers = []
-                    if progress_bar:
-                        progress(futs, multi=False)
+                    self._grid_parallel_worker(data_for_workers, progress_bar, tile_indices)
+                    tile_indices = []
         if data_for_workers:
             print('processing surface: group {} out of {}'.format(cur_run, total_runs))
-            data_for_workers = self.client.scatter(data_for_workers)
-            futs.append(self.client.map(_gridding_parallel, data_for_workers))
-            if progress_bar:
-                progress(futs, multi=False)
-        wait(futs)
-        results = self.client.gather(futs)
-        results = [item for sublist in results for item in sublist]
-        resolutions = [res[0] for res in results]
-        if isinstance(resolutions[0], list):  # this is true for vrgrids
-            resolutions = [r for subrez in resolutions for r in subrez]
-        tiles = [res[1] for res in results]
-        self.tiles[self.tiles != None] = tiles
-        if self.sub_type in ['srtile', 'quadtile']:
-            for cnt, tile in enumerate(self.tiles.flat):
-                self._save_tile(tile, cnt, only_grid=True)
-                self._load_tile(cnt, only_grid=True)
-        self.resolutions = np.sort(np.unique(resolutions)).tolist()
+            self._grid_parallel_worker(data_for_workers, progress_bar, tile_indices)
+        self.resolutions = np.sort(np.unique(self.resolutions)).tolist()
         self._save_grid()
 
     def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, use_dask: bool = False,
