@@ -656,6 +656,9 @@ class BathyGrid(BaseGrid):
         for rez in resolutions:
             if rez not in self.resolutions:
                 self.resolutions.append(rez)
+        tiles = None
+        resolutions = None
+        results = None
 
     def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,
                        progress_bar: bool = True):
@@ -702,6 +705,7 @@ class BathyGrid(BaseGrid):
                     chunk_index = 0
                     self._grid_parallel_worker(data_for_workers, progress_bar, tile_indices)
                     tile_indices = []
+                    data_for_workers = []
         if data_for_workers:
             print('processing surface: group {} out of {}'.format(cur_run, total_runs))
             self._grid_parallel_worker(data_for_workers, progress_bar, tile_indices)
