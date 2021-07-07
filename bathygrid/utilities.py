@@ -396,7 +396,7 @@ def utc_seconds_to_formatted_string(utctime: int):
         datetime formatted string
     """
 
-    fmttime = datetime.utcfromtimestamp(utctime).strftime('%m/%d/%Y %H:%M:%S')
+    fmttime = datetime.utcfromtimestamp(utctime).strftime('%Y-%m-%dT%H:%M:%S')
     return fmttime
 
 
@@ -414,5 +414,5 @@ def formatted_string_to_utc_seconds(fmttime: str):
     int
         utc time in seconds
     """
-    utctime = int(datetime.strptime(fmttime, '%m/%d/%Y %H:%M:%S').replace(tzinfo=timezone.utc).timestamp())
+    utctime = int(datetime.strptime(fmttime, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc).timestamp())
     return utctime

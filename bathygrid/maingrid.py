@@ -7,6 +7,7 @@ import xarray as xr
 from datetime import datetime
 import h5py
 from pyproj import CRS
+from typing import Union
 
 from bathygrid.backends import NumpyGrid
 from bathygrid.utilities import create_folder, gdal_raster_create, return_gdal_version
@@ -38,7 +39,7 @@ def _correct_for_layer_metadata(resfile: str, data: list, nodatavalue: float):
         r5.close()
 
 
-def _set_temporal_extents(resfile: str, start_time: float, end_time: float):
+def _set_temporal_extents(resfile: str, start_time: Union[str, int, float, datetime], end_time: Union[str, int, float, datetime]):
     """
     Taken from the HSTB bag.py library.  Sets the min/max time of the BAG by shoveling in the following xml blob:
 
@@ -68,8 +69,14 @@ def _set_temporal_extents(resfile: str, start_time: float, end_time: float):
         metadata = r5['BAG_root']['metadata'][:].tobytes().decode().replace("\x00", "")
         xml_root = et.fromstring(metadata)
 
-        start_time = datetime.utcfromtimestamp(start_time).isoformat()
-        end_time = datetime.utcfromtimestamp(end_time).isoformat()
+        if isinstance(start_time, (float, int)):
+            start_time = datetime.utcfromtimestamp(start_time).strftime('%Y-%m-%dT%H:%M:%S')
+        elif isinstance(start_time, datetime):
+            start_time = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+        if isinstance(end_time, (float, int)):
+            end_time = datetime.utcfromtimestamp(end_time).strftime('%Y-%m-%dT%H:%M:%S')
+        elif isinstance(end_time, datetime):
+            end_time = end_time.strftime('%Y-%m-%dT%H:%M:%S')
         gmd = '{http://www.isotc211.org/2005/gmd}'
         gml = '{http://www.opengis.net/gml/3.2}'
         bagschema = "{http://www.opennavsurf.org/schema/bag}"
