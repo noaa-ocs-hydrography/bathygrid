@@ -1,7 +1,7 @@
 import numpy as np
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
-from bathygrid.algorithms import nb_grid_mean, nb_grid_shoalest
+from bathygrid.algorithms import np_grid_mean, np_grid_shoalest
 from bathygrid.grid_variables import depth_resolution_lookup
 
 
@@ -192,7 +192,7 @@ class SRTile(Tile):
             depth_val = self.data['z'].compute()
         else:
             depth_val = self.data['z']
-        nb_grid_mean(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'],
+        np_grid_mean(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'],
                      vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
         if vert_val.size > 0:
@@ -225,7 +225,7 @@ class SRTile(Tile):
             depth_val = self.data['z'].compute()
         else:
             depth_val = self.data['z']
-        nb_grid_shoalest(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'],
+        np_grid_shoalest(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'],
                          vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
         if vert_val.size > 0:
