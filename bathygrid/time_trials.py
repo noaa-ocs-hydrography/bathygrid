@@ -80,4 +80,4 @@ if __name__ == '__main__':
 
 from bathygrid.convenience import load_grid
 surf = load_grid(r"C:\collab\dasktest\data_dir\EM2040c_NRT2\srgrid_mean_auto")
-surf.export(r"C:\collab\dasktest\data_dir\EM2040c_NRT2\test.tif", export_format='geotiff')
+surf.export(r"C:\collab\dasktest\data_dir\EM2040c_NRT2\test.tif", export_format='BAG')

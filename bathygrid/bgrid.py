@@ -550,7 +550,7 @@ class BathyGrid(BaseGrid):
                 yield geo, data_col, data_row, tile_cell_count, data
 
     def _finalize_chunk(self, column_indices: list, row_indices: list, cells_per_tile: int, layers: list, layerdata: list,
-                        nodatavalue: float):
+                        nodatavalue: float, for_gdal: bool = True):
         """
         With get_chunks_of_tiles, we build a small grid/geotransform from many tiles until we hit the maximum chunk width.
         Here we take those tiles and build the small grid.            
@@ -567,6 +567,8 @@ class BathyGrid(BaseGrid):
             list of string identifiers for the layers we are interested in
         layerdata
             list of the tile data dicts for each tile
+        for_gdal
+            if True, performs numpy fliplr to conform to the GDAL specifications
 
         Returns
         -------
@@ -586,11 +588,13 @@ class BathyGrid(BaseGrid):
             for cnt, data in enumerate(layerdata):
                 if lyr in data:
                     finaldata[lyr][curdcol[cnt]:curdcol[cnt] + cells_per_tile, curdrow[cnt]:curdrow[cnt] + cells_per_tile] = data[lyr]
+            if for_gdal:
+                finaldata[lyr] = np.fliplr(finaldata[lyr].T)
         return finaldata
     
     def get_chunks_of_tiles(self, resolution: float = None, layer: Union[str, list] = 'depth',
                             nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False,
-                            override_maximum_chunk_dimension: float = None):
+                            override_maximum_chunk_dimension: float = None, for_gdal: bool = True):
         """
         Grid generator that builds out grids in chunks from the parent grid.  We use it here as building one large grid
         for the whole area sometimes causes memory issues.  This generator will return grids that are less than or equal
@@ -613,6 +617,8 @@ class BathyGrid(BaseGrid):
         override_maximum_chunk_dimension
             by default, we use the grid_variables.maximum_chunk_dimension, use this optional argument if you want to
             override this value
+        for_gdal
+            if True, performs numpy fliplr to conform to the GDAL specifications
         """
 
         if isinstance(layer, str):
@@ -631,7 +637,7 @@ class BathyGrid(BaseGrid):
                                                                                             nodatavalue=nodatavalue, z_positive_up=z_positive_up):
             if curmaxdimension >= max_width:
                 assert all(curcellcount)  # all the tile counts per tile should be the same for the one resolution
-                finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue)
+                finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue, for_gdal)
                 yield curgeo, curmaxdimension, finaldata
                 curgeo = None
                 curdata = []

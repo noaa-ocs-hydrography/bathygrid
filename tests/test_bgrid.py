@@ -490,7 +490,7 @@ def test_get_chunks_of_tiles():
         assert bg.height == 6144.0
         assert max_dimension == 6144.0
         assert list(tdata.keys()) == ['depth']
-        assert tdata['depth'].shape == (96, 80)
+        assert tdata['depth'].shape == (80, 96)
 
     # lets try a smaller chunk to force chunks on the grid
     testfinaldata = []
@@ -502,7 +502,7 @@ def test_get_chunks_of_tiles():
         testfinalmaxdim.append(max_dimension)
     assert testfinalmaxdim[0] == 2048.0
     assert testfinalgeo[0] == [0.0, 64.0, 0, 50176.0, 0, -64.0]
-    assert testfinaldata[0]['depth'].shape == (16,32)
+    assert testfinaldata[0]['depth'].shape == (32, 16)
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
@@ -516,7 +516,7 @@ def test_get_chunks_of_tiles():
         assert bg.height == 6144.0
         assert max_dimension == 6144.0
         assert list(tdata.keys()) == ['depth']
-        assert tdata['depth'].shape == (96, 80)
+        assert tdata['depth'].shape == (80, 96)
 
     # lets try a smaller chunk to force chunks on the grid
     testfinaldata = []
@@ -528,4 +528,4 @@ def test_get_chunks_of_tiles():
         testfinalmaxdim.append(max_dimension)
     assert testfinalmaxdim[0] == 2048.0
     assert testfinalgeo[0] == [0.0, 64.0, 0, 50176.0, 0, -64.0]
-    assert testfinaldata[0]['depth'].shape == (16, 32)
+    assert testfinaldata[0]['depth'].shape == (32, 16)
