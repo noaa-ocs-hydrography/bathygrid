@@ -1,6 +1,6 @@
 import numpy as np
 from bathygrid.tile import SRTile
-from test_data.test_data import smalldata
+from test_data.test_data import smalldata, smileyface
 
 
 def test_tile_setup():
@@ -67,7 +67,7 @@ def test_tile_single_resolution():
                                                                [26.111, 26.263, 26.364, 26.515, 26.667, 26.768, 26.869, 26.97 ],
                                                                [27.121, 27.273, 27.374, 27.525, 27.677, 27.778, 27.879, 27.98 ],
                                                                [28.131, 28.283, 28.384, 28.535, 28.687, 28.788, 28.889, 28.99 ],
-                                                               [29.141, 29.293, 29.394, 29.545, 29.697, 29.798, 29.899, 30.0]]))
+                                                               [29.141, 29.293, 29.394, 29.545, 29.697, 29.798, 29.899, 30.0]], dtype=np.float32))
     assert np.array_equal(til.cells[128.0]['vertical_uncertainty'], np.array([[1.056, 1.071, 1.081, 1.096, 1.111, 1.121, 1.131, 1.141],
                                                                               [1.207, 1.222, 1.232, 1.247, 1.263, 1.273, 1.283, 1.293],
                                                                               [1.308, 1.323, 1.333, 1.348, 1.364, 1.374, 1.384, 1.394],
@@ -75,7 +75,7 @@ def test_tile_single_resolution():
                                                                               [1.611, 1.626, 1.636, 1.652, 1.667, 1.677, 1.687, 1.697],
                                                                               [1.712, 1.727, 1.737, 1.753, 1.768, 1.778, 1.788, 1.798],
                                                                               [1.813, 1.828, 1.838, 1.854, 1.869, 1.879, 1.889, 1.899],
-                                                                              [1.914, 1.929, 1.939, 1.955, 1.97, 1.98, 1.99, 2.0]]))
+                                                                              [1.914, 1.929, 1.939, 1.955, 1.97, 1.98, 1.99, 2.0]], dtype=np.float32))
     assert np.array_equal(til.cells[128.0]['horizontal_uncertainty'], np.array([[0.528, 0.535, 0.54, 0.548, 0.556, 0.561, 0.566, 0.571],
                                                                                 [0.604, 0.611, 0.616, 0.624, 0.631, 0.636, 0.641, 0.646],
                                                                                 [0.654, 0.662, 0.667, 0.674, 0.682, 0.687, 0.692, 0.697],
@@ -83,7 +83,7 @@ def test_tile_single_resolution():
                                                                                 [0.806, 0.813, 0.818, 0.826, 0.833, 0.838, 0.843, 0.848],
                                                                                 [0.856, 0.864, 0.869, 0.876, 0.884, 0.889, 0.894, 0.899],
                                                                                 [0.907, 0.914, 0.919, 0.927, 0.934, 0.939, 0.944, 0.949],
-                                                                                [0.957, 0.965, 0.97, 0.977, 0.985, 0.99, 0.995, 1.0]]))
+                                                                                [0.957, 0.965, 0.97, 0.977, 0.985, 0.99, 0.995, 1.0]], dtype=np.float32))
     assert np.array_equal(til.cell_indices[128.0], np.array([0, 0, 1, 2, 3, 3, 4, 5, 6, 7, 0, 0, 1, 2, 3, 3, 4,
                                                              5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 15, 16, 16, 17, 18,
                                                              19, 19, 20, 21, 22, 23, 24, 24, 25, 26, 27, 27, 28, 29, 30, 31, 24,
@@ -174,6 +174,20 @@ def test_geotransform():
     til = SRTile(0.0, 0.0, 1024)
     til.add_points(smalldata, 'test1')
     til.grid('mean', 128.0)
-    geo, cnt = til.get_geotransform(128.0)
+    geo = til.get_geotransform(128.0)
     assert geo == [0.0, 128.0, 0, 1024.0, 0, -128.0]
-    assert cnt == 1
+
+
+def test_get_layers_by_name_params():
+    til = SRTile(0.0, 0.0, 1024)
+    til.add_points(smileyface, 'test1')
+    til.grid('mean', 128.0)
+    layer_data = til.get_layers_by_name('depth')
+    assert np.isnan(layer_data[0][0])
+    assert layer_data[3][2] == np.float32(9.464)
+    layer_data = til.get_layers_by_name('depth', nodatavalue=1000000)
+    assert layer_data[0][0] == np.float32(1000000)
+    assert layer_data[3][2] == np.float32(9.464)
+    layer_data = til.get_layers_by_name('depth', nodatavalue=1000000, z_positive_up=True)
+    assert layer_data[0][0] == np.float32(1000000)
+    assert layer_data[3][2] == np.float32(-9.464)

@@ -29,7 +29,7 @@ def _correct_for_layer_metadata(resfile: str, data: list, nodatavalue: float):
     """
 
     if os.path.exists(resfile):
-        r5 = h5py.File(resfile, 'a')
+        r5 = h5py.File(resfile, 'r+')
         validdata = data[0] != nodatavalue
         r5['BAG_root']['elevation'].attrs['Maximum Elevation Value'] = np.float32(np.max(data[0][validdata]))
         r5['BAG_root']['elevation'].attrs['Minimum Elevation Value'] = np.float32(np.min(data[0][validdata]))
@@ -65,7 +65,7 @@ def _set_temporal_extents(resfile: str, start_time: Union[str, int, float, datet
     """
 
     if os.path.exists(resfile) and start_time and end_time:
-        r5 = h5py.File(resfile, 'a')
+        r5 = h5py.File(resfile, 'r+')
         metadata = r5['BAG_root']['metadata'][:].tobytes().decode().replace("\x00", "")
         xml_root = et.fromstring(metadata)
 
@@ -306,57 +306,6 @@ class SRGrid(NumpyGrid):
                        fmt=['%.3f' for d in dataset], delimiter=' ', comments='',
                        header=' '.join([nm for nm in dnames]))
 
-    def _gdal_preprocessing(self, resolution: float, nodatavalue: float = 1000000.0, z_positive_up: bool = True,
-                            layer_names: list = ['depth', 'vertical_uncertainty']):
-        """
-        Build the regular grid of depth and vertical uncertainty that raster outputs require.  Additionally, return
-        the origin/pixel size (geotransform) and the bandnames to display in the raster.
-
-        If vertical uncertainty is not found, will only return a list of [depth grid]
-
-        Set all NaN in the dataset given to the provided nodatavalue (can't seem to get NaN nodatavalue to display in
-        Caris)
-
-        Parameters
-        ----------
-        resolution
-            resolution that you want to return the data for
-        nodatavalue
-            nodatavalue to set in the regular grid
-        z_positive_up
-            if True, will output bands with positive up convention
-        layer_names
-            the layer names that you want to return the data for
-
-        Returns
-        -------
-        list
-            list of either [2d array of depth] or [2d array of depth, 2d array of vert uncertainty]
-        list
-            [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size]
-        list
-            list of band names, ex: ['Depth', 'Vertical Uncertainty']
-        """
-
-        finalnames = []
-        lyrtranslator = {'depth': 'Depth', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
-                         'horizontal_uncertainty': 'Horizontal Uncertainty'}
-        # only include layers that are actually in the grid
-        existing_layer_names = self.return_layer_names()
-        layer_names = [l for l in layer_names if l in existing_layer_names]
-
-        x, y, lyrdata, newmins, newmaxs = self.return_surf_xyz(layer_names, resolution, True)
-        geo_transform = [np.float32(x[0]), resolution, 0, np.float32(y[-1]), 0, -resolution]
-        layer_names = [lyrtranslator[ln] for ln in layer_names]
-        for cnt, lname in enumerate(layer_names):
-            if lname == 'Depth' and z_positive_up:
-                lyrdata[cnt] = lyrdata[cnt] * -1
-                lname = 'Elevation'
-            lyrdata[cnt] = np.fliplr(lyrdata[cnt].T)
-            lyrdata[cnt][np.isnan(lyrdata[cnt])] = nodatavalue
-            finalnames.append(lname)
-        return lyrdata, geo_transform, finalnames
-
     def _export_geotiff(self, filepath: str, z_positive_up: bool = True, resolution: float = None):
         """
         Export a GDAL generated geotiff to the provided filepath
@@ -371,18 +320,26 @@ class SRGrid(NumpyGrid):
             if provided, will only export the given resolution
         """
 
+        lyrtranslator = {'depth': 'Depth', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
+                         'horizontal_uncertainty': 'Horizontal Uncertainty'}
         nodatavalue = 1000000.0
         basefile, baseext = os.path.splitext(filepath)
         if resolution is not None:
             resolutions = [resolution]
         else:
             resolutions = self.resolutions
+        layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty']]
+        finalnames = [lyrtranslator[lname] for lname in layernames]
+        if z_positive_up and finalnames.index('Depth') != -1:
+            finalnames[finalnames.index('Depth')] = 'Elevation'
         for res in resolutions:
-            resfile = basefile + '_{}.tif'.format(res)
-            data, geo_transform, bandnames = self._gdal_preprocessing(resolution=res, nodatavalue=nodatavalue,
-                                                                      z_positive_up=z_positive_up)
-            gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=bandnames,
-                               driver='GTiff')
+            chunk_count = 1
+            resfile = basefile + '_{}_{}.tif'.format(res, chunk_count)
+            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
+                                                                        nodatavalue=nodatavalue, z_positive_up=z_positive_up):
+                data = list(data.values())
+                gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=finalnames,
+                                   driver='GTiff')
 
     def _export_bag(self, filepath: str, resolution: float = None, individual_name: str = 'unknown',
                     organizational_name: str = 'unknown', position_name: str = 'unknown', attr_date: str = '',
@@ -420,22 +377,30 @@ class SRGrid(NumpyGrid):
                        'VAR_OTHER_CONSTRAINTS=' + other_constraints, 'VAR_CLASSIFICATION=' + classification,
                        'VAR_SECURITY_USER_NOTE=' + security_user_note]
 
-        z_positive_up = True
+        lyrtranslator = {'depth': 'Depth', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
+                         'horizontal_uncertainty': 'Horizontal Uncertainty'}
         nodatavalue = 1000000.0
+        z_positive_up = True
         basefile, baseext = os.path.splitext(filepath)
         if resolution is not None:
             resolutions = [resolution]
         else:
             resolutions = self.resolutions
+        layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty']]
+        finalnames = [lyrtranslator[lname] for lname in layernames]
+        if z_positive_up and finalnames.index('Depth') != -1:
+            finalnames[finalnames.index('Depth')] = 'Elevation'
         for res in resolutions:
-            resfile = basefile + '_{}.bag'.format(res)
-            data, geo_transform, bandnames = self._gdal_preprocessing(resolution=res, nodatavalue=nodatavalue,
-                                                                      z_positive_up=z_positive_up)
-            gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=bandnames,
-                               driver='BAG', creation_options=bag_options)
-            _correct_for_layer_metadata(resfile, data, nodatavalue)
-            _set_temporal_extents(resfile, self.min_time, self.max_time)
-            _generate_caris_rxl(resfile, CRS.from_epsg(self.epsg).to_wkt(version='WKT1_GDAL', pretty=True))
+            chunk_count = 1
+            resfile = basefile + '_{}_{}.bag'.format(res, chunk_count)
+            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
+                                                                        nodatavalue=nodatavalue, z_positive_up=z_positive_up):
+                data = list(data.values())
+                gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue,
+                                   bandnames=finalnames, driver='BAG')
+                _correct_for_layer_metadata(resfile, data, nodatavalue)
+                _set_temporal_extents(resfile, self.min_time, self.max_time)
+                _generate_caris_rxl(resfile, CRS.from_epsg(self.epsg).to_wkt(version='WKT1_GDAL', pretty=True))
 
     def return_attribution(self):
         """

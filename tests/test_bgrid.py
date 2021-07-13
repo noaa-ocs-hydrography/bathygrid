@@ -151,10 +151,20 @@ def test_SRGrid_get_layer_by_name():
 
     res = bg.grid(resolution=128, clear_existing=True)
     assert res == [128.0]
+
+    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'], nodatavalue=1000000,
+                                 z_positive_up=True)
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 1920
+    assert np.count_nonzero(lyrs[0] != 1000000) == np.count_nonzero(lyrs[1] != 1000000) == np.count_nonzero(
+        lyrs[2] != 1000000) == 1521
+    assert lyrs[0][6, 0] == approx(-20.002, 0.001)
+    assert lyrs[1][6, 0] == 0.5
+    assert lyrs[2][6, 0] == 1.0
+
     lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
     assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 1920
     assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 1521
-    assert lyrs[0][6, 0] == 20.002
+    assert lyrs[0][6, 0] == approx(20.002, 0.001)
     assert lyrs[1][6, 0] == 0.5
     assert lyrs[2][6, 0] == 1.0
 
@@ -265,15 +275,15 @@ def test_VRGridTile_variable_rez_grid():
     assert bg.tiles[0][0].resolutions == [32.0, 64.0]
     assert bg.tiles[0][0].tiles.shape == (8, 8)
     assert bg.tiles[0][0].tiles[0][0] is None
-    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['depth'][1][1] == 671.073
-    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['horizontal_uncertainty'][1][1] == 0.519
-    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['vertical_uncertainty'][1][1] == 1.038
+    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['depth'][1][1] == approx(671.073, 0.001)
+    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['horizontal_uncertainty'][1][1] == approx(0.519, 0.001)
+    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['vertical_uncertainty'][1][1] == approx(1.038, 0.001)
 
     assert bg.tiles[3][3].resolutions == [128.0]
     assert bg.tiles[3][3].tiles.shape == (8, 8)
-    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['depth'][0][0] == 3412.555
-    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['horizontal_uncertainty'][0][0] == 0.824
-    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['vertical_uncertainty'][0][0] == 1.647
+    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['depth'][0][0] == approx(3412.555, 0.001)
+    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['horizontal_uncertainty'][0][0] == approx(0.824, 0.001)
+    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['vertical_uncertainty'][0][0] == approx(1.647, 0.001)
 
 
 def test_grid_names():
@@ -365,26 +375,6 @@ def test_with_dask():
     assert bg.coverage_area == 11.0
 
 
-def test_gdal_preprocessing():
-    bg = SRGrid(tile_size=1024)
-    bg.add_points(smileyface, 'test1', ['line1', 'line2'], 26917, 'waterline')
-    bg.grid(resolution=64)
-    data, geo_transform, bandnames = bg._gdal_preprocessing(resolution=64.0, nodatavalue=np.nan, z_positive_up=False,
-                                                            layer_names=['depth'])
-    trimdata, mins, maxs = bg.get_layers_trimmed('depth', 64.0)
-
-    # data mirrored for gdal
-    assert data[0][0][3] == trimdata[0][3][0]
-    assert data[0][-1][3] == trimdata[0][3][-1]
-    trimsize = (np.array(maxs) - np.array(mins)).tolist()
-    assert trimsize[0] == data[0].shape[1]
-    assert trimsize[1] == data[0].shape[0]
-    assert trimsize[0] == trimdata[0].shape[0]
-    assert trimsize[1] == trimdata[0].shape[1]
-    assert geo_transform == [192.0, 64.0, 0, 832.0, 0, -64.0]
-    assert bandnames == ['Depth']
-
-
 def test_return_unique_containers():
     bg = SRGrid(tile_size=1024)
     bg.add_points(smileyface, 'test1', ['line1', 'line2'], 26917, 'waterline')
@@ -437,31 +427,105 @@ def test_get_geotransform():
     bg = SRGrid(tile_size=1024)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(resolution=64)
-    assert bg.get_geotransform(64.0) == ([0.0, 64.0, 0, 55296.0, 0, -64.0], 30)
+    assert bg.get_geotransform(64.0) == [0.0, 64.0, 0, 55296.0, 0, -64.0]
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(resolution=64)
-    assert bg.get_geotransform(64.0) == ([0.0, 64.0, 0, 54912.0, 0, -64.0], 1521)
+    assert bg.get_geotransform(64.0) == [0.0, 64.0, 0, 55296.0, 0, -64.0]
 
 
-def test_tile_iterator():
+def test_get_tiles_by_resolution():
     bg = SRGrid(tile_size=1024)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(resolution=64)
 
-    for geo, tdata in bg.get_tiles_by_resolution(64.0):
-        assert geo == ([0.0, 64.0, 0, 50176.0, 0, -64.0], 1)
+    for geo, data_col, data_row, tile_cell_count, tdata in bg.get_tiles_by_resolution(64.0):
+        assert geo == [0.0, 64.0, 0, 50176.0, 0, -64.0]
         assert geo == bg.tiles[0][0].get_geotransform(64.0)  # first tile
         assert tdata['depth'].shape == (16, 16)
+        assert data_col == 0
+        assert data_row == 0
+        assert tile_cell_count == 16
         break
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(resolution=64)
 
-    for geo, tdata in bg.get_tiles_by_resolution(64.0):
-        assert geo == ([0.0, 64.0, 0, 50048.0, 0, -64.0], 1)
-        assert geo == bg.tiles[0][0].tiles[6][0].get_geotransform(64.0)  # first tile
-        assert tdata['depth'].shape == (2, 2)
+    for geo, data_col, data_row, tile_cell_count, tdata in bg.get_tiles_by_resolution(64.0):
+        assert geo == [0.0, 64.0, 0, 50176.0, 0, -64.0]  # with vr the geotransform is going to be the first subgrid
+        assert geo != bg.tiles[0][0].tiles[6][0].get_geotransform(64.0)  # first tile
+        assert tdata['depth'].shape == (16, 16)
+        assert tdata['depth'][13][1] == approx(20.004, 0.001)
+        assert np.isnan(tdata['depth'][13][2])
+        assert data_col == 0
+        assert data_row == 0
+        assert tile_cell_count == 16
         break
+
+    for geo, data_col, data_row, tile_cell_count, tdata in bg.get_tiles_by_resolution(64.0, nodatavalue=1000000, z_positive_up=True):
+        assert geo == [0.0, 64.0, 0, 50176.0, 0, -64.0]  # with vr the geotransform is going to be the first subgrid
+        assert geo != bg.tiles[0][0].tiles[6][0].get_geotransform(64.0)  # first tile
+        assert tdata['depth'].shape == (16, 16)
+        assert tdata['depth'][13][1] == approx(-20.004, 0.001)
+        assert tdata['depth'][13][2] == 1000000
+        assert data_col == 0
+        assert data_row == 0
+        assert tile_cell_count == 16
+        break
+
+
+def test_get_chunks_of_tiles():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+
+    # default chunk width in grid_variables is 65536, so this is going to be one big chunk
+    for geo, max_dimension, tdata in bg.get_chunks_of_tiles(64.0):
+        assert geo == [0.0, 64.0, 0, 55296.0, 0, -64.0]
+        assert bg.min_x == 0
+        assert bg.max_y == 55296
+        assert bg.width == 5120.0
+        assert bg.height == 6144.0
+        assert max_dimension == 6144.0
+        assert list(tdata.keys()) == ['depth']
+        assert tdata['depth'].shape == (96, 80)
+
+    # lets try a smaller chunk to force chunks on the grid
+    testfinaldata = []
+    testfinalgeo = []
+    testfinalmaxdim = []
+    for geo, max_dimension, tdata in bg.get_chunks_of_tiles(64.0, override_maximum_chunk_dimension=2048):
+        testfinaldata.append(tdata)
+        testfinalgeo.append(geo)
+        testfinalmaxdim.append(max_dimension)
+    assert testfinalmaxdim[0] == 2048.0
+    assert testfinalgeo[0] == [0.0, 64.0, 0, 50176.0, 0, -64.0]
+    assert testfinaldata[0]['depth'].shape == (16,32)
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+
+    for geo, max_dimension, tdata in bg.get_chunks_of_tiles(64.0):
+        assert geo == [0.0, 64.0, 0, 55296.0, 0, -64.0]
+        assert bg.min_x == 0
+        assert bg.max_y == 55296  # geo is not at max_y, as there are NaNs we are leaving out with the fine subgrid size
+        assert bg.width == 5120.0
+        assert bg.height == 6144.0
+        assert max_dimension == 6144.0
+        assert list(tdata.keys()) == ['depth']
+        assert tdata['depth'].shape == (96, 80)
+
+    # lets try a smaller chunk to force chunks on the grid
+    testfinaldata = []
+    testfinalgeo = []
+    testfinalmaxdim = []
+    for geo, max_dimension, tdata in bg.get_chunks_of_tiles(64.0, override_maximum_chunk_dimension=2048):
+        testfinaldata.append(tdata)
+        testfinalgeo.append(geo)
+        testfinalmaxdim.append(max_dimension)
+    assert testfinalmaxdim[0] == 2048.0
+    assert testfinalgeo[0] == [0.0, 64.0, 0, 50176.0, 0, -64.0]
+    assert testfinaldata[0]['depth'].shape == (16, 32)
