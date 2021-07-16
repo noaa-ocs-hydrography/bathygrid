@@ -334,12 +334,13 @@ class SRGrid(NumpyGrid):
             finalnames[finalnames.index('Depth')] = 'Elevation'
         for res in resolutions:
             chunk_count = 1
-            resfile = basefile + '_{}_{}.tif'.format(res, chunk_count)
             for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
                                                                         nodatavalue=nodatavalue, z_positive_up=z_positive_up):
+                resfile = basefile + '_{}_{}.tif'.format(res, chunk_count)
                 data = list(data.values())
                 gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=finalnames,
                                    driver='GTiff')
+                chunk_count += 1
 
     def _export_bag(self, filepath: str, resolution: float = None, individual_name: str = 'unknown',
                     organizational_name: str = 'unknown', position_name: str = 'unknown', attr_date: str = '',
@@ -392,15 +393,16 @@ class SRGrid(NumpyGrid):
             finalnames[finalnames.index('Depth')] = 'Elevation'
         for res in resolutions:
             chunk_count = 1
-            resfile = basefile + '_{}_{}.bag'.format(res, chunk_count)
             for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
                                                                         nodatavalue=nodatavalue, z_positive_up=z_positive_up):
+                resfile = basefile + '_{}_{}.bag'.format(res, chunk_count)
                 data = list(data.values())
                 gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue,
-                                   bandnames=finalnames, driver='BAG')
+                                   bandnames=finalnames, driver='BAG', creation_options=bag_options)
                 _correct_for_layer_metadata(resfile, data, nodatavalue)
                 _set_temporal_extents(resfile, self.min_time, self.max_time)
                 _generate_caris_rxl(resfile, CRS.from_epsg(self.epsg).to_wkt(version='WKT1_GDAL', pretty=True))
+                chunk_count += 1
 
     def return_attribution(self):
         """
