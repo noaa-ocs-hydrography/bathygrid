@@ -529,3 +529,57 @@ def test_get_chunks_of_tiles():
     assert testfinalmaxdim[0] == 2048.0
     assert testfinalgeo[0] == [0.0, 64.0, 0, 50176.0, 0, -64.0]
     assert testfinaldata[0]['depth'].shape == (32, 16)
+
+
+def test_layer_values_at_xy():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=64)
+
+    assert np.isnan(bg.tiles[0][0].cells[64.0]['depth'][12, 1])
+    assert np.isnan(bg.tiles[0][0].cells[64.0]['depth'][12, 2])
+    assert np.isnan(bg.tiles[0][0].cells[64.0]['depth'][12, 3])
+    assert bg.tiles[0][0].cells[64.0]['depth'][13, 1] == approx(20.004, 0.001)
+    assert np.isnan(bg.tiles[0][0].cells[64.0]['depth'][13, 2])
+    assert bg.tiles[0][0].cells[64.0]['depth'][13, 3] == approx(20.008, 0.001)
+    assert bg.tiles[0][0].cells[64.0]['depth'][14, 1] == approx(20.204, 0.001)
+    assert np.isnan(bg.tiles[0][0].cells[64.0]['depth'][14, 2])
+    assert bg.tiles[0][0].cells[64.0]['depth'][14, 3] == approx(20.208, 0.001)
+
+    assert np.array_equal(bg.tiles[0][0].cell_edges_x[64.0][0:4], np.array([0.0, 64.0, 128.0, 192.0]))
+    assert np.array_equal(bg.tiles[0][0].cell_edges_y[64.0][11:15], np.array([49856.0, 49920.0, 49984.0, 50048.0]))
+
+    assert np.isnan(bg.layer_values_at_xy(0.0, 49983.9))
+    assert bg.layer_values_at_xy(0.0, 49984.0) == approx(20.0, 0.001)
+    assert bg.layer_values_at_xy(100.0, 50000.0) == approx(20.004, 0.001)
+    assert bg.layer_values_at_xy(64.0, 49984.1) == approx(20.004, 0.001)
+    assert bg.layer_values_at_xy(192.0, 49984.0) == approx(20.008, 0.001)
+    assert bg.layer_values_at_xy(64.0, 50048.0) == approx(20.204, 0.001)
+    assert bg.layer_values_at_xy(192.0, 50048.0) == approx(20.208, 0.001)
+
+    assert bg.layer_values_at_xy([0, 64], [49984, 49984]) == approx(np.array([20.0, 20.004]), 0.001)
+    outofboundscheck = bg.layer_values_at_xy([-10, 0, 64, 9999999999], [49984, 49984, 49984, 49984])
+    assert outofboundscheck[1:3] == approx(np.array([20.0, 20.004]), 0.001)
+    assert np.isnan(outofboundscheck[0])
+    assert np.isnan(outofboundscheck[3])
+
+    bg = VRGridTile(tile_size=1024, subtile_size=128)
+    bg.add_points(deepdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+
+    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['depth'][0][0] == 612.5
+    assert np.array_equal(bg.tiles[0][0].tiles[7][7].cell_edges_x[64.0], np.array([2944., 3008., 3072.]))
+    assert np.array_equal(bg.tiles[0][0].tiles[7][7].cell_edges_y[64.0], np.array([52096., 52160., 52224.]))
+
+    assert bg.tiles[3][3].tiles[0][0].cells[128.0]['depth'][0][0] == approx(2605.432, 0.001)
+    assert np.array_equal(bg.tiles[3][3].tiles[0][0].cell_edges_x[128.0], np.array([5120., 5248.]))
+    assert np.array_equal(bg.tiles[3][3].tiles[0][0].cell_edges_y[128.0], np.array([54272., 54400.]))
+
+    assert bg.layer_values_at_xy(2945.0, 52097.0) == approx(612.5, 0.001)
+    assert bg.layer_values_at_xy(5120.0, 54272.0) == approx(2605.432, 0.001)
+
+    assert bg.layer_values_at_xy([2945, 5120], [52097, 54272]) == approx(np.array([612.5, 2605.432]), 0.001)
+    outofboundscheck = bg.layer_values_at_xy([-100, 2945, 5120, 99999999999], [52097, 52097, 54272, 54272])
+    assert outofboundscheck[1:3] == approx(np.array([612.5, 2605.432]), 0.001)
+    assert np.isnan(outofboundscheck[0])
+    assert np.isnan(outofboundscheck[3])

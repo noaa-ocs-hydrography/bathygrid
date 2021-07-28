@@ -982,7 +982,8 @@ class BathyGrid(BaseGrid):
 
         return [[self.min_x, self.min_y], [self.max_x, self.max_y]]
 
-    def return_surf_xyz(self, layer: Union[str, list] = 'depth', resolution: float = None, cell_boundaries: bool = True):
+    def return_surf_xyz(self, layer: Union[str, list] = 'depth', resolution: float = None, cell_boundaries: bool = True,
+                        nodatavalue: float = np.float32(np.nan)):
         """
         Return the xyz grid values as well as an index for the valid nodes in the surface.  z is the gridded result that
         matches the provided layername
@@ -997,6 +998,8 @@ class BathyGrid(BaseGrid):
             If True, the user wants the cell boundaries, not the node locations.  If False, returns the node locations
             instead.  If you want to export node locations to file, you want this to be false.  If you are building
             a gdal object, you want this to be True.
+        nodatavalue
+            nodatavalue to set in the regular grid
 
         Returns
         -------
@@ -1019,7 +1022,7 @@ class BathyGrid(BaseGrid):
                 raise ValueError('BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
             resolution = self.resolutions[0]
 
-        surfs, new_mins, new_maxs = self.get_layers_trimmed(layer, resolution)
+        surfs, new_mins, new_maxs = self.get_layers_trimmed(layer, resolution, nodatavalue)
 
         if not cell_boundaries:  # get the node locations for each cell
             x = (np.arange(self.min_x, self.max_x, resolution) + resolution / 2)[new_mins[1]:new_maxs[1]]
@@ -1028,6 +1031,109 @@ class BathyGrid(BaseGrid):
             x = np.arange(self.min_x, self.max_x, resolution)[new_mins[1]:new_maxs[1] + 1]
             y = np.arange(self.min_y, self.max_y, resolution)[new_mins[0]:new_maxs[0] + 1]
         return x, y, surfs, new_mins, new_maxs
+
+    def _validate_layer_query(self, x_loc: np.array, y_loc: np.array, layer: str = 'depth', resolution: float = None,
+                           nodatavalue: float = np.float32(np.nan)):
+        """
+        validate the inputs to layer_values_at_xy and return the corrected inputs
+        """
+        asarrays = True
+        if isinstance(x_loc, (tuple, list)):
+            x_loc = np.array(list(x_loc))
+        if isinstance(y_loc, list):
+            y_loc = np.array(list(y_loc))
+        if isinstance(x_loc, np.ndarray) and isinstance(y_loc, np.ndarray) and x_loc.shape != y_loc.shape:
+            raise ValueError('x and y locations must be the same shape, x_loc:{} y_loc:{}'.format(x_loc, y_loc))
+        if isinstance(x_loc, (float, int)) or isinstance(y_loc, (float, int)):
+            try:
+                x_loc = float(x_loc)
+                y_loc = float(y_loc)
+                asarrays = False
+            except:
+                raise ValueError(
+                    'x_loc and y_loc must either both be arrays or both be integers or floats'.format(x_loc, y_loc))
+        if asarrays:
+            layer_values = np.full_like(x_loc, np.float32(nodatavalue), dtype=np.float32)
+        else:
+            layer_values = np.float32(nodatavalue)
+        if not resolution:
+            query_resolution = sorted(
+                self.resolutions)  # should be sorted already, but ensure we start with high rez first
+        else:
+            query_resolution = [resolution]
+        return asarrays, query_resolution, layer_values, x_loc, y_loc
+
+    def layer_values_at_xy(self, x_loc: np.array, y_loc: np.array, layer: str = 'depth', resolution: float = None,
+                           nodatavalue: float = np.float32(np.nan)):
+        """
+        Return the layer values at the given x y locations.
+
+        Parameters
+        ----------
+        x_loc
+            numpy array, 1d x locations for the grid nodes (easting)
+        y_loc
+            numpy array, 1d y locations for the grid nodes (northing)
+        layer
+            layer that we want to query
+        resolution
+            resolution of the layers we want to query, if None will go through all resolutions and return the highest
+            resolution layer value at the xy location
+        nodatavalue
+            nodatavalue to set in the regular grid
+
+        Returns
+        -------
+        np.array
+            1d array of the same size as x_loc/y_loc with the layer values at the locations
+        """
+
+        asarrays, query_resolution, layer_values, x_loc, y_loc = self._validate_layer_query(x_loc, y_loc, layer, resolution, nodatavalue)
+        for rez in query_resolution:
+            if np.isnan(nodatavalue):
+                no_values_yet = np.isnan(layer_values)
+            else:
+                no_values_yet = layer_values == nodatavalue
+            if not no_values_yet.any():  # we have an answer for all xy locations
+                break
+            surf_x, surf_y, surfs, new_mins, new_maxs = self.return_surf_xyz(layer, rez, cell_boundaries=True,
+                                                                             nodatavalue=nodatavalue)
+
+            if asarrays:
+                query_x_loc = x_loc[no_values_yet]
+                query_y_loc = y_loc[no_values_yet]
+            else:
+                query_x_loc = x_loc
+                query_y_loc = y_loc
+
+            # get the cell index for each query value
+            digitized_x = np.digitize(query_x_loc, surf_x)
+            digitized_y = np.digitize(query_y_loc, surf_y)
+
+            # drop values that have no valid answer
+            out_of_bounds = (digitized_x == 0) + (digitized_y == 0) + (digitized_x == len(surf_x)) + (digitized_y == len(surf_y))
+            out_of_bounds_idx = np.where(out_of_bounds)[0]
+            in_bounds_idx = np.where(~out_of_bounds)[0]
+            if asarrays:
+                digitized_x = np.delete(digitized_x, out_of_bounds_idx)
+                digitized_y = np.delete(digitized_y, out_of_bounds_idx)
+            elif out_of_bounds_idx.size:
+                continue
+
+            # now align with the cell values
+            digitized_x = digitized_x - 1
+            digitized_y = digitized_y - 1
+
+            # store layer values for the given valid xy locations
+            if digitized_x.size and digitized_y.size:
+                # not sure why the np.array(digitized_y) is required, if you just use digitized_y/digitized_x, it seems
+                # to return a slice of the array
+                if asarrays:
+                    valid_index = np.arange(layer_values.size)[no_values_yet][in_bounds_idx]
+                    layer_values[valid_index] = surfs[0][np.array(digitized_y), np.array(digitized_x)]
+                else:
+                    layer_values = surfs[0][np.array(digitized_y), np.array(digitized_x)]
+        return layer_values
 
     def return_unique_containers(self):
         """
