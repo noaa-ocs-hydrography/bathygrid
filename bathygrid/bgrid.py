@@ -10,7 +10,7 @@ from bathygrid.grids import BaseGrid
 from bathygrid.tile import SRTile, Tile
 from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar, \
     utc_seconds_to_formatted_string, formatted_string_to_utc_seconds
-from bathygrid.grid_variables import depth_resolution_lookup
+from bathygrid.grid_variables import depth_resolution_lookup, maximum_chunk_dimension
 
 
 class BathyGrid(BaseGrid):
@@ -89,6 +89,17 @@ class BathyGrid(BaseGrid):
         return False
 
     @property
+    def layer_names(self):
+        """
+        Get the existing layer names in the tiles by checking the first real tile
+        """
+        for tile in self.tiles.flat:
+            if tile:
+                layernames = tile.layer_names
+                return layernames
+        return []
+
+    @property
     def cell_count(self):
         """
         Return the total cell count for each resolution, cells being the gridded values in each tile.
@@ -117,22 +128,13 @@ class BathyGrid(BaseGrid):
 
     def get_geotransform(self, resolution: float):
         """
-        Return the summation of the geotransforms for all tiles in this grid and the total tile count for this resolution
+        Return the summation of the geotransforms for all tiles in this grid and a place holder for tile count
         [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size]
         """
-        parent_transform = None
-        totaltiles = 0
-        for tile in self.tiles.flat:
-            if tile:
-                newgeo, tilecount = tile.get_geotransform(resolution)
-                if newgeo is not None:
-                    totaltiles += tilecount
-                    if parent_transform is None:
-                        parent_transform = newgeo
-                    else:
-                        parent_transform[0] = min(parent_transform[0], newgeo[0])
-                        parent_transform[3] = max(parent_transform[3], newgeo[3])
-        return parent_transform, totaltiles
+
+        parent_transform = [np.float32(self.min_x), resolution, 0, np.float32(self.max_y), 0, -resolution]
+
+        return parent_transform
 
     def _update_metadata(self, container_name: str = None, file_list: list = None, epsg: int = None,
                          vertical_reference: str = None, min_time: float = None, max_time: float = None):
@@ -249,7 +251,7 @@ class BathyGrid(BaseGrid):
 
         return np.full((self.tile_size, self.tile_size), np.nan)
 
-    def _build_layer_grid(self, resolution: float):
+    def _build_layer_grid(self, resolution: float, nodatavalue: float = np.float32(np.nan)):
         """
         Build a 2d array of NaN for the size of the whole BathyGrid (given the provided resolution)
 
@@ -259,11 +261,13 @@ class BathyGrid(BaseGrid):
             float resolution that we want to use to build the grid
         """
 
+        # ensure nodatavalue is a float32
+        nodatavalue = np.float32(nodatavalue)
         y_size = self.height / resolution
         x_size = self.width / resolution
         assert y_size.is_integer()
         assert x_size.is_integer()
-        return np.full((int(y_size), int(x_size)), np.nan)
+        return np.full((int(y_size), int(x_size)), nodatavalue)
 
     def _convert_dataset(self):
         """
@@ -498,21 +502,166 @@ class BathyGrid(BaseGrid):
                 self.tiles = None
             self._save_grid()
 
-    def get_tiles_by_resolution(self, resolution: float):
+    def get_tiles_by_resolution(self, resolution: float = None, layer: Union[str, list] = 'depth',
+                                nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False):
         """
         Tile generator to get the geotransform and data from all tiles
-        """
-        for row in range(len(self.tiles)):
-            for col in range(len(self.tiles[row])):
-                tile = self.tiles[row][col]
-                if tile:
-                    if isinstance(tile, BathyGrid):  # this is a vrgrid and tile is a sub grid
-                        tile.get_tiles_by_resolution(resolution)
-                    else:
-                        geo = tile.get_geotransform(resolution)
-                        yield geo, tile.cells[resolution]
 
-    def get_layers_by_name(self, layer: Union[str, list] = 'depth', resolution: float = None):
+        Yields a generator that contains a tuple of (geotransform used by GDAL, tilecount), the column index, the row index, the number of cells
+        in a row and the tile data as a dictionary (ex: {'depth': np.array([[...})
+
+        Parameters
+        ----------
+        resolution
+            resolution of the layer we want to access, if not provided will use the first resolution found, will error if there is
+            more than one resolution in the grid
+        layer
+            string identifier for the layer(s) to access, valid layers include 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+        nodatavalue
+            nodatavalue to set in the regular grid
+        z_positive_up
+            if True, will output bands with positive up convention
+        """
+
+        if not resolution:
+            if len(self.resolutions) > 1:
+                raise ValueError(
+                    'BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
+            resolution = self.resolutions[0]
+        if self.no_grid:
+            raise ValueError('BathyGrid: Grid is empty, gridding has not been run yet.')
+        if isinstance(layer, str):
+            layer = [layer]
+        for cnt, tile in enumerate(self.tiles.flat):
+            if tile:
+                col, row = self._tile_idx_to_row_col(cnt)
+                tile_cell_count = self.tile_size / resolution
+                assert tile_cell_count.is_integer()
+                tile_cell_count = int(tile_cell_count)
+                data_col, data_row = col * tile_cell_count, row * tile_cell_count
+                geo = tile.get_geotransform(resolution)
+                data = {}
+                for cnt, lyr in enumerate(layer):
+                    newdata = tile.get_layers_by_name(lyr, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
+                    if newdata is not None:
+                        if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
+                            newdata = newdata[0]
+                        data[lyr] = newdata
+                yield geo, data_col, data_row, tile_cell_count, data
+
+    def _finalize_chunk(self, column_indices: list, row_indices: list, cells_per_tile: int, layers: list, layerdata: list,
+                        nodatavalue: float, for_gdal: bool = True):
+        """
+        With get_chunks_of_tiles, we build a small grid/geotransform from many tiles until we hit the maximum chunk width.
+        Here we take those tiles and build the small grid.            
+    
+        Parameters
+        ----------
+        column_indices
+            integer row indices for where the tile fits in the small grid
+        row_indices
+            integer row indices for where the tile fits in the small grid
+        cells_per_tile
+            number of cells we would expect along one dimension for each tile (assumes tiles are all square)
+        layers
+            list of string identifiers for the layers we are interested in
+        layerdata
+            list of the tile data dicts for each tile
+        for_gdal
+            if True, performs numpy fliplr to conform to the GDAL specifications
+
+        Returns
+        -------
+        dict
+            dictionary of gridded data, ex: {'depth': np.array([[....})
+        """
+        finaldata = {}
+        # ensure nodatavalue is a float32
+        nodatavalue = np.float32(nodatavalue)
+        # normalize the column/row indices, the data and the geotransform yielded here are just for this chunk
+        mincol = min(column_indices)
+        curdcol = [col - mincol for col in column_indices]
+        minrow = min(row_indices)
+        curdrow = [row - minrow for row in row_indices]
+        for lyr in layers:
+            finaldata[lyr] = np.full((max(curdcol) + cells_per_tile, max(curdrow) + cells_per_tile), nodatavalue)
+            for cnt, data in enumerate(layerdata):
+                if lyr in data:
+                    finaldata[lyr][curdcol[cnt]:curdcol[cnt] + cells_per_tile, curdrow[cnt]:curdrow[cnt] + cells_per_tile] = data[lyr]
+            if for_gdal:
+                finaldata[lyr] = np.fliplr(finaldata[lyr].T)
+        return finaldata
+    
+    def get_chunks_of_tiles(self, resolution: float = None, layer: Union[str, list] = 'depth',
+                            nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False,
+                            override_maximum_chunk_dimension: float = None, for_gdal: bool = True):
+        """
+        Grid generator that builds out grids in chunks from the parent grid.  We use it here as building one large grid
+        for the whole area sometimes causes memory issues.  This generator will return grids that are less than or equal
+        in height and width to the maximum_chunk_dimension.
+
+        Yields the GDAL Geotransform for the smaller grid, the max dimension of the smaller grid, and the dict of the
+        smaller gridded dataset as a dictionary (ex: {'depth': np.array([[...})
+
+        Parameters
+        ----------
+        resolution
+            resolution of the layer we want to access, if not provided will use the first resolution found, will error if there is
+            more than one resolution in the grid
+        layer
+            string identifier for the layer(s) to access, valid layers include 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+        nodatavalue
+            nodatavalue to set in the regular grid
+        z_positive_up
+            if True, will output bands with positive up convention
+        override_maximum_chunk_dimension
+            by default, we use the grid_variables.maximum_chunk_dimension, use this optional argument if you want to
+            override this value
+        for_gdal
+            if True, performs numpy fliplr to conform to the GDAL specifications
+        """
+
+        if isinstance(layer, str):
+            layer = [layer]
+        if override_maximum_chunk_dimension:
+            max_width = override_maximum_chunk_dimension
+        else:
+            max_width = maximum_chunk_dimension
+        curmaxdimension = 0
+        curgeo = None
+        curdata = []
+        curdcol = []
+        curdrow = []
+        curcellcount = []
+        for geo, data_col, data_row, tile_cell_count, tdata in self.get_tiles_by_resolution(resolution, layer,
+                                                                                            nodatavalue=nodatavalue, z_positive_up=z_positive_up):
+            if curmaxdimension >= max_width:
+                assert all(curcellcount)  # all the tile counts per tile should be the same for the one resolution
+                finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue, for_gdal)
+                yield curgeo, curmaxdimension, finaldata
+                curgeo = None
+                curdata = []
+                curdcol = []
+                curdrow = []
+                curcellcount = []
+
+            curdata.append(tdata)
+            curdcol.append(data_col)
+            curdrow.append(data_row)
+            curcellcount.append(tile_cell_count)
+            if curgeo is None:
+                curgeo = geo
+            else:
+                # merge the georeference of the two datasets, everything remains the same except the origin, which is now the global origin
+                curgeo = [min([curgeo[0], geo[0]]), curgeo[1], curgeo[2], max([curgeo[3], geo[3]]), curgeo[4], curgeo[5]]
+            # here we take the greatest dimension currently to see if we are big enough to stop the chunk
+            curmaxdimension = max((max(curdcol) - min(curdcol) + tile_cell_count) * resolution, (max(curdrow) - min(curdrow) + tile_cell_count) * resolution)
+        assert all(curcellcount)  # all the cell counts per tile should be the same for the one resolution
+        finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue)
+        yield curgeo, curmaxdimension, finaldata
+
+    def get_layers_by_name(self, layer: Union[str, list] = 'depth', resolution: float = None, nodatavalue: float = np.float32(np.nan),
+                           z_positive_up: bool = False):
         """
         Return the numpy 2d grid for the provided layer, resolution.  Will check to ensure that you have gridded at this
         resolution already.  Grid returned will have NaN values for empty spaces.
@@ -523,6 +672,10 @@ class BathyGrid(BaseGrid):
             string identifier for the layer(s) to access, valid layers include 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
         resolution
             resolution of the layer we want to access
+        nodatavalue
+            nodatavalue to set in the regular grid
+        z_positive_up
+            if True, will output bands with positive up convention
 
         Returns
         -------
@@ -530,6 +683,9 @@ class BathyGrid(BaseGrid):
             list of gridded data for each provided layer, resolution across all tiles
         """
 
+        # ensure nodatavalue is a float32
+        nodatavalue = np.float32(nodatavalue)
+        empty = True
         if isinstance(layer, str):
             layer = [layer]
         if self.no_grid:
@@ -538,7 +694,7 @@ class BathyGrid(BaseGrid):
             if len(self.resolutions) > 1:
                 raise ValueError('BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
             resolution = self.resolutions[0]
-        data = [self._build_layer_grid(resolution) for lyr in layer]
+        data = [self._build_layer_grid(resolution, nodatavalue=nodatavalue) for lyr in layer]
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
                 col, row = self._tile_idx_to_row_col(cnt)
@@ -547,14 +703,18 @@ class BathyGrid(BaseGrid):
                 tile_cell_count = int(tile_cell_count)
                 data_col, data_row = col * tile_cell_count, row * tile_cell_count
                 for cnt, lyr in enumerate(layer):
-                    newdata = tile.get_layers_by_name(lyr, resolution)
+                    newdata = tile.get_layers_by_name(lyr, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
                     if newdata is not None:
                         if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
                             newdata = newdata[0]
                         data[cnt][data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = newdata
+                        empty = False
+        if empty:
+            data = None
         return data
 
-    def get_layers_trimmed(self, layer: Union[str, list] = 'depth', resolution: float = None):
+    def get_layers_trimmed(self, layer: Union[str, list] = 'depth', resolution: float = None, nodatavalue: float = np.float32(np.nan),
+                           z_positive_up: bool = False):
         """
         Get the layer indicated by the provided layername and trim to the minimum bounding box of real values in the
         layer.
@@ -565,6 +725,10 @@ class BathyGrid(BaseGrid):
             string identifier for the layer to access, one of 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
         resolution
             resolution of the layer we want to access
+        nodatavalue
+            nodatavalue to set in the regular grid
+        z_positive_up
+            if True, will output bands with positive up convention
 
         Returns
         -------
@@ -576,7 +740,7 @@ class BathyGrid(BaseGrid):
             new maxs to use
         """
 
-        data = self.get_layers_by_name(layer, resolution)
+        data = self.get_layers_by_name(layer, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
         dat = data[0]  # just use the first layer, the mins/maxs should be the same for all layers
 
         notnan = ~np.isnan(dat)
@@ -818,7 +982,8 @@ class BathyGrid(BaseGrid):
 
         return [[self.min_x, self.min_y], [self.max_x, self.max_y]]
 
-    def return_surf_xyz(self, layer: Union[str, list] = 'depth', resolution: float = None, cell_boundaries: bool = True):
+    def return_surf_xyz(self, layer: Union[str, list] = 'depth', resolution: float = None, cell_boundaries: bool = True,
+                        nodatavalue: float = np.float32(np.nan)):
         """
         Return the xyz grid values as well as an index for the valid nodes in the surface.  z is the gridded result that
         matches the provided layername
@@ -833,6 +998,8 @@ class BathyGrid(BaseGrid):
             If True, the user wants the cell boundaries, not the node locations.  If False, returns the node locations
             instead.  If you want to export node locations to file, you want this to be false.  If you are building
             a gdal object, you want this to be True.
+        nodatavalue
+            nodatavalue to set in the regular grid
 
         Returns
         -------
@@ -855,7 +1022,7 @@ class BathyGrid(BaseGrid):
                 raise ValueError('BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
             resolution = self.resolutions[0]
 
-        surfs, new_mins, new_maxs = self.get_layers_trimmed(layer, resolution)
+        surfs, new_mins, new_maxs = self.get_layers_trimmed(layer, resolution, nodatavalue)
 
         if not cell_boundaries:  # get the node locations for each cell
             x = (np.arange(self.min_x, self.max_x, resolution) + resolution / 2)[new_mins[1]:new_maxs[1]]
@@ -864,6 +1031,109 @@ class BathyGrid(BaseGrid):
             x = np.arange(self.min_x, self.max_x, resolution)[new_mins[1]:new_maxs[1] + 1]
             y = np.arange(self.min_y, self.max_y, resolution)[new_mins[0]:new_maxs[0] + 1]
         return x, y, surfs, new_mins, new_maxs
+
+    def _validate_layer_query(self, x_loc: np.array, y_loc: np.array, layer: str = 'depth', resolution: float = None,
+                           nodatavalue: float = np.float32(np.nan)):
+        """
+        validate the inputs to layer_values_at_xy and return the corrected inputs
+        """
+        asarrays = True
+        if isinstance(x_loc, (tuple, list)):
+            x_loc = np.array(list(x_loc))
+        if isinstance(y_loc, list):
+            y_loc = np.array(list(y_loc))
+        if isinstance(x_loc, np.ndarray) and isinstance(y_loc, np.ndarray) and x_loc.shape != y_loc.shape:
+            raise ValueError('x and y locations must be the same shape, x_loc:{} y_loc:{}'.format(x_loc, y_loc))
+        if isinstance(x_loc, (float, int)) or isinstance(y_loc, (float, int)):
+            try:
+                x_loc = float(x_loc)
+                y_loc = float(y_loc)
+                asarrays = False
+            except:
+                raise ValueError(
+                    'x_loc and y_loc must either both be arrays or both be integers or floats'.format(x_loc, y_loc))
+        if asarrays:
+            layer_values = np.full_like(x_loc, np.float32(nodatavalue), dtype=np.float32)
+        else:
+            layer_values = np.float32(nodatavalue)
+        if not resolution:
+            query_resolution = sorted(
+                self.resolutions)  # should be sorted already, but ensure we start with high rez first
+        else:
+            query_resolution = [resolution]
+        return asarrays, query_resolution, layer_values, x_loc, y_loc
+
+    def layer_values_at_xy(self, x_loc: np.array, y_loc: np.array, layer: str = 'depth', resolution: float = None,
+                           nodatavalue: float = np.float32(np.nan)):
+        """
+        Return the layer values at the given x y locations.
+
+        Parameters
+        ----------
+        x_loc
+            numpy array, 1d x locations for the grid nodes (easting)
+        y_loc
+            numpy array, 1d y locations for the grid nodes (northing)
+        layer
+            layer that we want to query
+        resolution
+            resolution of the layers we want to query, if None will go through all resolutions and return the highest
+            resolution layer value at the xy location
+        nodatavalue
+            nodatavalue to set in the regular grid
+
+        Returns
+        -------
+        np.array
+            1d array of the same size as x_loc/y_loc with the layer values at the locations
+        """
+
+        asarrays, query_resolution, layer_values, x_loc, y_loc = self._validate_layer_query(x_loc, y_loc, layer, resolution, nodatavalue)
+        for rez in query_resolution:
+            if np.isnan(nodatavalue):
+                no_values_yet = np.isnan(layer_values)
+            else:
+                no_values_yet = layer_values == nodatavalue
+            if not no_values_yet.any():  # we have an answer for all xy locations
+                break
+            surf_x, surf_y, surfs, new_mins, new_maxs = self.return_surf_xyz(layer, rez, cell_boundaries=True,
+                                                                             nodatavalue=nodatavalue)
+
+            if asarrays:
+                query_x_loc = x_loc[no_values_yet]
+                query_y_loc = y_loc[no_values_yet]
+            else:
+                query_x_loc = x_loc
+                query_y_loc = y_loc
+
+            # get the cell index for each query value
+            digitized_x = np.digitize(query_x_loc, surf_x)
+            digitized_y = np.digitize(query_y_loc, surf_y)
+
+            # drop values that have no valid answer
+            out_of_bounds = (digitized_x == 0) + (digitized_y == 0) + (digitized_x == len(surf_x)) + (digitized_y == len(surf_y))
+            out_of_bounds_idx = np.where(out_of_bounds)[0]
+            in_bounds_idx = np.where(~out_of_bounds)[0]
+            if asarrays:
+                digitized_x = np.delete(digitized_x, out_of_bounds_idx)
+                digitized_y = np.delete(digitized_y, out_of_bounds_idx)
+            elif out_of_bounds_idx.size:
+                continue
+
+            # now align with the cell values
+            digitized_x = digitized_x - 1
+            digitized_y = digitized_y - 1
+
+            # store layer values for the given valid xy locations
+            if digitized_x.size and digitized_y.size:
+                # not sure why the np.array(digitized_y) is required, if you just use digitized_y/digitized_x, it seems
+                # to return a slice of the array
+                if asarrays:
+                    valid_index = np.arange(layer_values.size)[no_values_yet][in_bounds_idx]
+                    layer_values[valid_index] = surfs[0][np.array(digitized_y), np.array(digitized_x)]
+                else:
+                    layer_values = surfs[0][np.array(digitized_y), np.array(digitized_x)]
+        return layer_values
 
     def return_unique_containers(self):
         """

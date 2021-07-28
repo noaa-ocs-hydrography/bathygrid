@@ -242,6 +242,15 @@ class TileGrid(Grid):
         else:
             return 0
 
+    @property
+    def layer_names(self):
+        """
+        Get the existing layer names in the tile
+        """
+        for resolution in self.cells:
+            return list(self.cells[resolution].keys())
+        return []
+
     def _init_from_size(self, min_x: float, min_y: float, size: float):
         """
         Build the extents and width/height from the provided values
@@ -267,10 +276,10 @@ class TileGrid(Grid):
 
     def get_geotransform(self, resolution: float):
         """
-        Return the GDAL geotransform for this tile and the tile count (which for the tile class, is just one)
+        Return the GDAL geotransform for this tile
         [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size]
         """
         if resolution in self.cells:
-            return [np.float32(self.min_x), resolution, 0, np.float32(self.max_y), 0, -resolution], 1
+            return [np.float32(self.min_x), resolution, 0, np.float32(self.max_y), 0, -resolution]
         else:
-            return None, 0
+            return None

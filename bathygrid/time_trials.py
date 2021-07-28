@@ -76,3 +76,8 @@ if __name__ == '__main__':
     print('Numba shoal: {}'.format(timeit.timeit(trial_grid_shoal_numba, number=2)))
     print('Numpy shoal: {}'.format(timeit.timeit(trial_grid_shoal_numpy, number=2)))
 
+
+
+from bathygrid.convenience import load_grid
+surf = load_grid(r"C:\collab\dasktest\data_dir\EM2040c_NRT2\srgrid_mean_auto")
+surf.export(r"C:\collab\dasktest\data_dir\EM2040c_NRT2\test.tif", export_format='BAG')

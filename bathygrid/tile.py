@@ -137,7 +137,7 @@ class SRTile(Tile):
             self.container.pop(container)
             self.point_count_changed = True
 
-    def new_grid(self, resolution: float, algorithm: str, nodatavalue: float = np.nan):
+    def new_grid(self, resolution: float, algorithm: str, nodatavalue: float = np.float32(np.nan)):
         """
         Construct a new grid for the given resolution/algorithm and store it in the appropriate class attributes
 
@@ -161,11 +161,11 @@ class SRTile(Tile):
         grid_shape = (grid_x.size, grid_y.size)
         self.cells[resolution] = {}
         if algorithm == 'mean':
-            self.cells[resolution]['depth'] = np.full(grid_shape, nodatavalue)
+            self.cells[resolution]['depth'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
             if self.data is not None and 'tvu' in self.data.dtype.names:
-                self.cells[resolution]['vertical_uncertainty'] = np.full(grid_shape, nodatavalue)
+                self.cells[resolution]['vertical_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
             if self.data is not None and 'thu' in self.data.dtype.names:
-                self.cells[resolution]['horizontal_uncertainty'] = np.full(grid_shape, nodatavalue)
+                self.cells[resolution]['horizontal_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
 
     def _run_mean_grid(self, resolution: float):
         """
@@ -291,10 +291,8 @@ class SRTile(Tile):
                 if 'horizontal_uncertainty' in self.cells[resolution]:
                     self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan)
                 if new_points.any():
-                    self.cell_indices[resolution][new_points] = bin2d_with_indices(loaded_data['x'][new_points],
-                                                                                   loaded_data['y'][new_points],
-                                                                                   self.cell_edges_x[resolution],
-                                                                                   self.cell_edges_y[resolution])
+                    self.cell_indices[resolution][new_points] = bin2d_with_indices(loaded_data['x'][new_points], loaded_data['y'][new_points],
+                                                                                   self.cell_edges_x[resolution], self.cell_edges_y[resolution])
             else:  # there are no new points and this resolution already exists in the grid, so skip the gridding
                 return resolution
         if algorithm == 'mean':
@@ -304,7 +302,8 @@ class SRTile(Tile):
         self.point_count_changed = False
         return resolution
 
-    def get_layers_by_name(self, layer: str = 'depth', resolution: float = None):
+    def get_layers_by_name(self, layer: str = 'depth', resolution: float = None, nodatavalue: float = np.float32(np.nan),
+                           z_positive_up: bool = False):
         """
         Get the layer at the provided resolution with the provided resolution.
 
@@ -315,6 +314,10 @@ class SRTile(Tile):
         resolution
             resolution of the layer that we want.  If None, pulls the only layer in the Tile, errors if there is more
             than one layer
+        nodatavalue
+            nodatavalue to set in the regular grid
+        z_positive_up
+            if True, will output bands with positive up convention
 
         Returns
         -------
@@ -322,6 +325,8 @@ class SRTile(Tile):
             2d array of the gridded data
         """
 
+        # ensure nodatavalue is a float32
+        nodatavalue = np.float32(nodatavalue)
         if self.is_empty:
             return None
         if not resolution and len(list(self.cells.keys())) > 1:
@@ -333,7 +338,17 @@ class SRTile(Tile):
             resolution = list(self.cells.keys())[0]
         if layer not in self.cells[resolution]:
             raise ValueError('Tile {}: layer {} not found for resolution {}'.format(self.name, layer, resolution))
-        return self.cells[resolution][layer]
+        try:
+            data = np.copy(self.cells[resolution][layer].compute())
+        except:
+            data = np.copy(self.cells[resolution][layer])
+        if np.count_nonzero(np.isnan(data)) == data.size:
+            return None
+        if layer.lower() == 'depth' and z_positive_up:
+            data = data * -1
+        if not np.isnan(nodatavalue):  # if nodatavalue is not NaN, we need to replace it with the nodatavalue
+            data[np.isnan(data)] = nodatavalue
+        return data
 
 
 class VRTile(Tile):
