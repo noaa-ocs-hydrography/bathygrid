@@ -28,7 +28,7 @@ Perform these in order:
 
 `conda activate bathygrid_test `
 
-`conda install -c conda-forge gdal=3.2.1`
+`conda install -c conda-forge gdal=3.2.1 h5py`
 
 `pip install git+https://github.com/noaa-ocs-hydrography/bathygrid.git#egg=bathygrid`
 

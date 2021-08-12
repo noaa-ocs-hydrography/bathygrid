@@ -13,7 +13,7 @@ DESCRIPTION = 'Parallel gridding algorithm for bathymetric data'
 URL = 'https://github.com/noaa-ocs-hydrography/bathygrid'
 EMAIL = 'eric.g.younkin@noaa.gov'
 AUTHOR = 'Eric Younkin'
-REQUIRES_PYTHON = '>=3.8.2'
+REQUIRES_PYTHON = '>=3.6.0'
 VERSION = ''
 
 # What packages are required for this module to be executed?
