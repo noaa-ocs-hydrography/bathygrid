@@ -160,7 +160,7 @@ class SRTile(Tile):
         self.cell_edges_y[resolution] = np.append(grid_y, grid_y[-1] + resolution)
         grid_shape = (grid_x.size, grid_y.size)
         self.cells[resolution] = {}
-        if algorithm == 'mean':
+        if algorithm in ['mean', 'shoalest']:
             self.cells[resolution]['depth'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
             if self.data is not None and 'tvu' in self.data.dtype.names:
                 self.cells[resolution]['vertical_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
