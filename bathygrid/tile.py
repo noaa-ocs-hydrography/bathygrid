@@ -261,19 +261,22 @@ class SRTile(Tile):
         if clear_existing:
             self.clear_grid()
         if not isinstance(self.data, np.ndarray):
-            loaded_data = self.data.compute()
+            loaded_x = self.data['x'].compute()
+            loaded_y = self.data['y'].compute()
         else:
-            loaded_data = self.data
+            loaded_x = self.data['x']
+            loaded_y = self.data['y']
 
         if resolution not in self.cells or algorithm != self.algorithm:
             self.algorithm = algorithm
             self.new_grid(resolution, algorithm)
         if resolution not in self.cell_indices:
-            self.cell_indices[resolution] = bin2d_with_indices(loaded_data['x'], loaded_data['y'],
+            self.cell_indices[resolution] = bin2d_with_indices(loaded_x, loaded_y,
                                                                self.cell_edges_x[resolution],
                                                                self.cell_edges_y[resolution])
         else:
-            loaded_data = np.array(loaded_data)
+            loaded_x = np.array(loaded_x)
+            loaded_y = np.array(loaded_y)
             if not isinstance(self.cell_indices[resolution], np.ndarray):
                 self.cell_indices[resolution] = self.cell_indices[resolution].compute()
             self.cell_indices[resolution] = np.array(self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
@@ -291,10 +294,13 @@ class SRTile(Tile):
                 if 'horizontal_uncertainty' in self.cells[resolution]:
                     self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan)
                 if new_points.any():
-                    self.cell_indices[resolution][new_points] = bin2d_with_indices(loaded_data['x'][new_points], loaded_data['y'][new_points],
+                    self.cell_indices[resolution][new_points] = bin2d_with_indices(loaded_x[new_points], loaded_y[new_points],
                                                                                    self.cell_edges_x[resolution], self.cell_edges_y[resolution])
             else:  # there are no new points and this resolution already exists in the grid, so skip the gridding
                 return resolution
+        loaded_x = None
+        loaded_y = None
+
         if algorithm == 'mean':
             self._run_mean_grid(resolution)
         elif algorithm == 'shoalest':

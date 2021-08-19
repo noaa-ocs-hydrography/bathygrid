@@ -4,8 +4,8 @@ from pytest import approx
 from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.tile import Tile
-from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata, geographicsmileyface
-from bathygrid.utilities import utc_seconds_to_formatted_string, formatted_string_to_utc_seconds
+from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata
+from bathygrid.utilities import utc_seconds_to_formatted_string
 
 
 def test_SRGrid_setup():
@@ -130,6 +130,42 @@ def test_SRGrid_add_multiple_sources():
     assert tile.name == '3072.0_52224.0'
     assert tile.container == {'test1': [0, 100]}
     assert 'test1' in bg.container_timestamp
+
+
+def test_SRGrid_grid_mean():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.is_empty
+    assert bg.no_grid
+
+    res = bg.grid(algorithm='mean')
+    assert not bg.no_grid
+    assert res == [1.0]
+    assert bg.data is None  # after adding we clear the point data to free memory
+    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 31457280
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 2500
+    assert lyrs[0][848, 0] == 20.0
+    assert lyrs[1][848, 0] == 0.5
+    assert lyrs[2][848, 0] == 1.0
+
+
+def test_SRGrid_grid_shoalest():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.is_empty
+    assert bg.no_grid
+
+    res = bg.grid(algorithm='shoalest')
+    assert not bg.no_grid
+    assert res == [1.0]
+    assert bg.data is None  # after adding we clear the point data to free memory
+    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 31457280
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 2500
+    assert lyrs[0][848, 0] == 20.0
+    assert lyrs[1][848, 0] == 0.5
+    assert lyrs[2][848, 0] == 1.0
 
 
 def test_SRGrid_get_layer_by_name():
