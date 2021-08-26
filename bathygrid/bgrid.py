@@ -180,7 +180,7 @@ class BathyGrid(BaseGrid):
             self.container[container_name] = file_list
         else:
             self.container[container_name] = ['Unknown']
-        self.container_timestamp[container_name] = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.container_timestamp[container_name] = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
 
         if self.epsg and epsg:
             if self.epsg != int(epsg):

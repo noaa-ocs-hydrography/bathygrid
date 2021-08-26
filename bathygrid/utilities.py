@@ -84,7 +84,7 @@ def create_folder(output_directory: str, fldrname: str):
     """
 
     os.makedirs(output_directory, exist_ok=True)
-    tstmp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    tstmp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
     try:
         fldr_path = os.path.join(output_directory, fldrname)
         os.mkdir(fldr_path)
