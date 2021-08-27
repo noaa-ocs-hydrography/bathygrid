@@ -250,6 +250,14 @@ class TileGrid(Grid):
         for resolution in self.cells:
             return list(self.cells[resolution].keys())
         return []
+    
+    @property
+    def resolutions(self):
+        """
+        Get the existing resolutions
+        """
+
+        return list(self.cells.keys())
 
     def _init_from_size(self, min_x: float, min_y: float, size: float):
         """

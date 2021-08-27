@@ -14,7 +14,7 @@ class Tile(TileGrid):
     def __init__(self, min_x: float, min_y: float, size: float):
         super().__init__(min_x, min_y, size)
         self.algorithm = None
-
+    
     def clear_grid(self):
         """
         Clear all data associated with grids

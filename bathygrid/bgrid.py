@@ -407,10 +407,10 @@ class BathyGrid(BaseGrid):
             tilexorigin = self.tile_x_origin.ravel()
             tileyorigin = self.tile_y_origin.ravel()
             if progress_bar:
-                print_progress_bar(0, len(unique_locs), 'Adding Points to {}:'.format(self.name))
+                print_progress_bar(0, len(unique_locs), 'Adding Points from {}:'.format(container_name))
             for cnt, ul in enumerate(unique_locs):
                 if progress_bar:
-                    print_progress_bar(cnt + 1, len(unique_locs), 'Adding Points to {}:'.format(self.name))
+                    print_progress_bar(cnt + 1, len(unique_locs), 'Adding Points from {}:'.format(container_name))
                 point_mask = binnum == ul
                 pts = self.data[point_mask]
                 if flat_tiles[ul] is None:
@@ -502,10 +502,10 @@ class BathyGrid(BaseGrid):
             if not self.is_empty:
                 flat_tiles = self.tiles.ravel()
                 if progress_bar:
-                    print_progress_bar(0, len(flat_tiles), 'Removing Points from {}:'.format(self.name))
+                    print_progress_bar(0, len(flat_tiles), 'Removing Points from {}:'.format(container_name))
                 for cnt, tile in enumerate(flat_tiles):
                     if progress_bar:
-                        print_progress_bar(cnt + 1, len(flat_tiles), 'Removing Points from {}:'.format(self.name))
+                        print_progress_bar(cnt + 1, len(flat_tiles), 'Removing Points from {}:'.format(container_name))
                     if tile:
                         tile.remove_points(container_name, progress_bar=False)
                         if tile.is_empty:
@@ -804,6 +804,9 @@ class BathyGrid(BaseGrid):
                 if regrid_option == 'update' and not clear_existing:
                     # update only those tiles with new points/removed points.  If the point count hasn't changed, we skip
                     if not tile.point_count_changed:
+                        for rz in tile.resolutions:
+                            if rz not in self.resolutions:
+                                self.resolutions.append(rz)
                         continue
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
                     rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
@@ -888,6 +891,9 @@ class BathyGrid(BaseGrid):
                 if regrid_option == 'update' and not clear_existing:
                     # update only those tiles with new points/removed points.  If the point count hasn't changed, we skip
                     if not tile.point_count_changed:
+                        for rz in tile.resolutions:
+                            if rz not in self.resolutions:
+                                self.resolutions.append(rz)
                         continue
                 if self.sub_type in ['srtile', 'quadtile']:
                     self._load_tile_data_to_memory(tile)
