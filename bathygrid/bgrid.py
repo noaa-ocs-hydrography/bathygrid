@@ -82,10 +82,11 @@ class BathyGrid(BaseGrid):
         BathyGrids can either contain more BathyGrids or contain Tiles with point/gridded data.  This check determines
         whether or not this instance contains Tiles
         """
-        for tile in self.tiles.flat:
-            if tile:
-                if isinstance(tile, Tile):
-                    return True
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    if isinstance(tile, Tile):
+                        return True
         return False
 
     @property
@@ -93,10 +94,11 @@ class BathyGrid(BaseGrid):
         """
         Get the existing layer names in the tiles by checking the first real tile
         """
-        for tile in self.tiles.flat:
-            if tile:
-                layernames = tile.layer_names
-                return layernames
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    layernames = tile.layer_names
+                    return layernames
         return []
 
     @property
@@ -105,14 +107,15 @@ class BathyGrid(BaseGrid):
         Return the total cell count for each resolution, cells being the gridded values in each tile.
         """
         final_count = {}
-        for tile in self.tiles.flat:
-            if tile:
-                tcell = tile.cell_count
-                for rez in tcell:
-                    if rez in final_count:
-                        final_count[rez] += tcell[rez]
-                    else:
-                        final_count[rez] = tcell[rez]
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    tcell = tile.cell_count
+                    for rez in tcell:
+                        if rez in final_count:
+                            final_count[rez] += tcell[rez]
+                        else:
+                            final_count[rez] = tcell[rez]
         return final_count
 
     @property
@@ -125,6 +128,18 @@ class BathyGrid(BaseGrid):
         for rez, cnt in cellcount.items():
             area += cnt * rez
         return area
+
+    @property
+    def point_count_changed(self):
+        """
+        Return True if any of the tiles in this grid have a point_count_changed (which is set when points are added/removed)
+        """
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    if tile.point_count_changed:
+                        return True
+        return False
 
     def get_geotransform(self, resolution: float):
         """
@@ -757,7 +772,7 @@ class BathyGrid(BaseGrid):
 
         return data, [rmin, cmin], [rmax, cmax]
 
-    def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,
+    def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: bool,
                       progress_bar: bool = True):
         """
         Run the gridding without Dask, Tile after Tile.
@@ -770,6 +785,10 @@ class BathyGrid(BaseGrid):
             algorithm to grid by
         clear_existing
             if True, will clear out any existing grids before generating this one
+        regrid_option
+            controls what parts of the grid will get re-gridded if regrid is True and clear_existing is False, one of 'full', 'update'.  Full mode will
+            regrid the entire grid.  Update mode will only update those tiles that have a point_count_changed=True.  If clear_existing is True, will
+            automatically run in 'full' mode
         auto_resolution
             if True and the tile type supports it, allow the tile to auto calculate the appropriate resolution
         progress_bar
@@ -782,12 +801,16 @@ class BathyGrid(BaseGrid):
             if progress_bar:
                 print_progress_bar(cnt + 1, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
             if tile:
+                if regrid_option == 'update' and not clear_existing:
+                    # update only those tiles with new points/removed points.  If the point count hasn't changed, we skip
+                    if not tile.point_count_changed:
+                        continue
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
-                    rez = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
+                    rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
                 elif isinstance(tile, SRTile) and auto_resolution and self.name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
-                    rez = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
+                    rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
                 else:
-                    rez = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
+                    rez = tile.grid(algorithm, resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
                 if isinstance(rez, float) or isinstance(rez, int):
                     rez = [rez]
                 for rz in rez:
@@ -824,7 +847,7 @@ class BathyGrid(BaseGrid):
         resolutions = None
         results = None
 
-    def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, auto_resolution: bool,
+    def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: bool,
                        progress_bar: bool = True):
         """
         Use Dask to submit the tiles in parallel to the cluster for processing.  Probably should think up a more
@@ -839,6 +862,10 @@ class BathyGrid(BaseGrid):
             algorithm to grid by
         clear_existing
             if True, will clear out any existing grids before generating this one
+        regrid_option
+            controls what parts of the grid will get re-gridded if regrid is True and clear_existing is False, one of 'full', 'update'.  Full mode will
+            regrid the entire grid.  Update mode will only update those tiles that have a point_count_changed=True.  If clear_existing is True, will
+            automatically run in 'full' mode
         auto_resolution
             if True and the tile type supports it, allow the tile to auto calculate the appropriate resolution
         progress_bar
@@ -858,10 +885,14 @@ class BathyGrid(BaseGrid):
         tile_indices = []
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
+                if regrid_option == 'update' and not clear_existing:
+                    # update only those tiles with new points/removed points.  If the point count hasn't changed, we skip
+                    if not tile.point_count_changed:
+                        continue
                 if self.sub_type in ['srtile', 'quadtile']:
                     self._load_tile_data_to_memory(tile)
                 tile_indices.append(cnt)
-                data_for_workers.append([tile, algorithm, resolution, clear_existing, auto_resolution, self.name])
+                data_for_workers.append([tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, self.name])
                 chunk_index += 1
                 if chunk_index == chunks_at_a_time:
                     print('processing surface: group {} out of {}'.format(cur_run, total_runs))
@@ -876,8 +907,8 @@ class BathyGrid(BaseGrid):
         self.resolutions = np.sort(np.unique(self.resolutions)).tolist()
         self._save_grid()
 
-    def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, use_dask: bool = False,
-             progress_bar: bool = True):
+    def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False,
+             regrid_option: str = 'full', use_dask: bool = False, progress_bar: bool = True):
         """
         Gridding involves calling 'grid' on all child grids/tiles until you eventually call 'grid' on a Tile.  The Tiles
         are the objects that actually contain the points / gridded data
@@ -889,8 +920,11 @@ class BathyGrid(BaseGrid):
         algorithm
             algorithm to grid by
         clear_existing
-            if True, will clear out any existing grids before generating this one.  Otherwise if the resolution exists,
-            will only run gridding on tiles that have new points.
+            if True, will clear out any existing grids before generating this one.
+        regrid_option
+            controls what parts of the grid will get re-gridded if regrid is True and clear_existing is False, one of 'full', 'update'.  Full mode will
+            regrid the entire grid.  Update mode will only update those tiles that have a point_count_changed=True.  If clear_existing is True, will
+            automatically run in 'full' mode
         use_dask
             if True, will start a dask LocalCluster instance and perform the gridding in parallel
         progress_bar
@@ -900,6 +934,9 @@ class BathyGrid(BaseGrid):
         if self.grid_algorithm and (self.grid_algorithm != algorithm) and not clear_existing:
             raise ValueError('Bathygrid: gridding with {}, but {} is already used within the grid.  You must clear'.format(algorithm, self.grid_algorithm) +
                              ' existing data first before using a different gridding algorithm')
+        if clear_existing and regrid_option == 'update':
+            print('Warning: regrid_option=update is ignored when using clear_existing=True.  The entire grid will be re-gridded.')
+
         self.grid_algorithm = algorithm
         self.grid_resolution = resolution
         if resolution is not None:
@@ -914,9 +951,9 @@ class BathyGrid(BaseGrid):
         self.resolutions = []
 
         if use_dask:
-            self._grid_parallel(algorithm, resolution, clear_existing, auto_resolution=auto_resolution, progress_bar=progress_bar)
+            self._grid_parallel(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar)
         else:
-            self._grid_regular(algorithm, resolution, clear_existing, auto_resolution=auto_resolution, progress_bar=progress_bar)
+            self._grid_regular(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar)
         return self.resolutions
 
     def plot(self, layer: str = 'depth', resolution: float = None):
@@ -1167,11 +1204,11 @@ def _gridding_parallel(data_blob: list):
     """
     Gridding routine suited for running in parallel using the dask cluster.
     """
-    tile, algorithm, resolution, clear_existing, auto_resolution, grid_name = data_blob
+    tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name = data_blob
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
-        rez = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
+        rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     elif isinstance(tile, SRTile) and auto_resolution and grid_name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
-        rez = tile.grid(algorithm, None, clear_existing=clear_existing, progress_bar=False)
+        rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     else:
-        rez = tile.grid(algorithm, resolution, clear_existing=clear_existing, progress_bar=False)
+        rez = tile.grid(algorithm, resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     return rez, tile

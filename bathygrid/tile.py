@@ -233,7 +233,7 @@ class SRTile(Tile):
         if horiz_val.size > 0:
             self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
-    def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, progress_bar: bool = False):
+    def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, regrid_option: str = '', progress_bar: bool = False):
         """
         Grid the Tile data using the provided algorithm and resolution.  Stores the gridded data in the Tile
 
@@ -245,6 +245,8 @@ class SRTile(Tile):
             algorithm to grid by
         clear_existing
             If True, clears all the existing gridded data associated with the tile
+        regrid_option
+            a place holder to match the bgrid grid method
         progress_bar
             if True, show a progress bar
 
@@ -271,9 +273,7 @@ class SRTile(Tile):
             self.algorithm = algorithm
             self.new_grid(resolution, algorithm)
         if resolution not in self.cell_indices:
-            self.cell_indices[resolution] = bin2d_with_indices(loaded_x, loaded_y,
-                                                               self.cell_edges_x[resolution],
-                                                               self.cell_edges_y[resolution])
+            self.cell_indices[resolution] = bin2d_with_indices(loaded_x, loaded_y, self.cell_edges_x[resolution], self.cell_edges_y[resolution])
         else:
             loaded_x = np.array(loaded_x)
             loaded_y = np.array(loaded_y)
@@ -287,17 +287,16 @@ class SRTile(Tile):
                 if 'horizontal_uncertainty' in self.cells[resolution]:
                     self.cells[resolution]['horizontal_uncertainty'] = self.cells[resolution]['horizontal_uncertainty'].compute()
             new_points = self.cell_indices[resolution] == -1
-            if new_points.any() or self.point_count_changed:
-                self.cells[resolution]['depth'] = np.full(self.cells[resolution]['depth'].shape, np.nan)
-                if 'vertical_uncertainty' in self.cells[resolution]:
-                    self.cells[resolution]['vertical_uncertainty'] = np.full(self.cells[resolution]['vertical_uncertainty'].shape, np.nan)
-                if 'horizontal_uncertainty' in self.cells[resolution]:
-                    self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan)
-                if new_points.any():
-                    self.cell_indices[resolution][new_points] = bin2d_with_indices(loaded_x[new_points], loaded_y[new_points],
-                                                                                   self.cell_edges_x[resolution], self.cell_edges_y[resolution])
-            else:  # there are no new points and this resolution already exists in the grid, so skip the gridding
-                return resolution
+            if new_points.any():
+                self.cell_indices[resolution][new_points] = bin2d_with_indices(loaded_x[new_points], loaded_y[new_points],
+                                                                               self.cell_edges_x[resolution], self.cell_edges_y[resolution])
+
+            self.cells[resolution]['depth'] = np.full(self.cells[resolution]['depth'].shape, np.nan)
+            if 'vertical_uncertainty' in self.cells[resolution]:
+                self.cells[resolution]['vertical_uncertainty'] = np.full(self.cells[resolution]['vertical_uncertainty'].shape, np.nan)
+            if 'horizontal_uncertainty' in self.cells[resolution]:
+                self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan)
+
         loaded_x = None
         loaded_y = None
 

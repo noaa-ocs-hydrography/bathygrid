@@ -132,6 +132,27 @@ def test_SRGrid_add_multiple_sources():
     assert 'test1' in bg.container_timestamp
 
 
+def test_SRGrid_point_count_changed():
+    bg = SRGrid(tile_size=1024)
+    assert not bg.point_count_changed
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert bg.point_count_changed
+    res = bg.grid(algorithm='mean')
+    assert not bg.point_count_changed
+    bg.add_points(smalldata3, 'test2', ['line3', 'line4'], 26917, 'waterline')
+    assert bg.point_count_changed
+
+
+def test_SRGrid_update():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    res = bg.grid(algorithm='mean')
+    bg.add_points(smalldata3, 'test2', ['line3', 'line4'], 26917, 'waterline')
+    assert bg.point_count_changed
+    res = bg.grid(algorithm='mean', regrid_option='update')
+    assert not bg.point_count_changed
+
+
 def test_SRGrid_grid_mean():
     bg = SRGrid(tile_size=1024)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
