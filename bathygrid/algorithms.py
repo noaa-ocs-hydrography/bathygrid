@@ -41,17 +41,22 @@ def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu:
     if thu.size > 0 and thu_grid.size > 0:
         thu_enabled = True
 
-    unique_indices = np.unique(cell_indices)
-    for uniq in iter(unique_indices):
-        msk = cell_indices == uniq
-        # this is required for numba to work
-        #urow, ucol = my_unravel_index(uniq, grid.shape)
-        urow, ucol = np.unravel_index(uniq, grid.shape)
-        grid[urow, ucol] = np.mean(depth[msk])
-        if tvu_enabled:
-            tvu_grid[urow, ucol] = np.mean(tvu[msk])
-        if thu_enabled:
-            thu_grid[urow, ucol] = np.mean(thu[msk])
+    cell_sort = np.argsort(cell_indices)
+    unique_indices, uidx, ucounts = np.unique(cell_indices[cell_sort], return_index=True, return_counts=True)
+    urow, ucol = np.unravel_index(unique_indices, grid.shape)
+
+    depth_sum = np.add.reduceat(depth[cell_sort], uidx, axis=0)
+    depth_mean = depth_sum / ucounts
+    grid[urow, ucol] = depth_mean
+    if tvu_enabled:
+        tvu_sum = np.add.reduceat(tvu[cell_sort], uidx, axis=0)
+        tvu_mean = tvu_sum / ucounts
+        tvu_grid[urow, ucol] = tvu_mean
+    if thu_enabled:
+        thu_sum = np.add.reduceat(thu[cell_sort], uidx, axis=0)
+        thu_mean = thu_sum / ucounts
+        thu_grid[urow, ucol] = thu_mean
+
     return grid, tvu_grid, thu_grid
 
 
@@ -95,18 +100,24 @@ def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
     if thu.size > 0 and thu_grid.size > 0:
         thu_enabled = True
 
-    unique_indices = np.unique(cell_indices)
-    for uniq in iter(unique_indices):
-        msk = cell_indices == uniq
-        # this is required for numba to work
-        # urow, ucol = my_unravel_index(uniq, grid.shape)
-        urow, ucol = np.unravel_index(uniq, grid.shape)
-        min_depth_idx = depth[msk].argmin()
-        grid[urow, ucol] = depth[msk][min_depth_idx]
-        if tvu_enabled:
-            tvu_grid[urow, ucol] = tvu[msk][min_depth_idx]
-        if thu_enabled:
-            thu_grid[urow, ucol] = thu[msk][min_depth_idx]
+    cell_sort = np.argsort(cell_indices)
+    unique_indices, uidx, ucounts = np.unique(cell_indices[cell_sort], return_index=True, return_counts=True)
+    urow, ucol = np.unravel_index(unique_indices, grid.shape)
+
+    depth_min = np.minimum.reduceat(depth[cell_sort], uidx, axis=0)
+    grid[urow, ucol] = depth_min
+
+    depth_idx = None
+    if tvu_enabled or thu_enabled:
+        depth_sort = np.argsort(depth)
+        depth_idx = np.searchsorted(depth[depth_sort], depth_min)
+    if tvu_enabled:
+        tvu_shoalest = tvu[depth_idx]
+        tvu_grid[urow, ucol] = tvu_shoalest
+    if thu_enabled:
+        thu_shoalest = thu[depth_idx]
+        thu_grid[urow, ucol] = thu_shoalest
+
     return grid, tvu_grid, thu_grid
 
 

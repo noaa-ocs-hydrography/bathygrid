@@ -338,8 +338,7 @@ class SRGrid(NumpyGrid):
                                                                         nodatavalue=nodatavalue, z_positive_up=z_positive_up):
                 resfile = basefile + '_{}_{}.tif'.format(res, chunk_count)
                 data = list(data.values())
-                gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=finalnames,
-                                   driver='GTiff')
+                gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=finalnames, driver='GTiff')
                 chunk_count += 1
 
     def _export_bag(self, filepath: str, resolution: float = None, individual_name: str = 'unknown',
