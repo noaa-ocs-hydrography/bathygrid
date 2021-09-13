@@ -3,6 +3,7 @@ import numpy as np
 from datetime import datetime, timezone
 from typing import Union
 from dask.distributed import get_client, Client
+from dask.array import Array as darray
 import psutil
 from shutil import rmtree
 import time
@@ -127,7 +128,7 @@ def is_power_of_two(n: Union[int, float]):
         return False
 
 
-def bin2d_with_indices(x: np.array, y: np.array, x_edges: np.array, y_edges: np.array):
+def bin2d_with_indices(x: Union[darray, np.array], y: Union[darray, np.array], x_edges: np.array, y_edges: np.array):
     """
     Started out using scipy binned_statistic_2d, but I found that it would append bins regardless of the number of bins
     you ask for (even when all points are inside the explicit bin edges) and the binnumber would be difficult to
@@ -152,14 +153,28 @@ def bin2d_with_indices(x: np.array, y: np.array, x_edges: np.array, y_edges: np.
         bins (is a one dimensional index)
     """
 
+    if isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
+        xdata = [x]
+        ydata = [y]
+    elif isinstance(x, darray) and isinstance(y, darray):
+        xdata = [x.partitions[i] for i in range(x.npartitions)]
+        ydata = [y.partitions[i] for i in range(y.npartitions)]
+    else:
+        raise ValueError('Expected x and y to either both be numpy arrays or dask arrays, found x = {} y = {}'.format(type(x), type(y)))
+
     if x_edges.size == 2 and y_edges.size == 2:
         return np.zeros(x.shape, dtype=int)
     xshape = x_edges.shape[0] - 1  # edges will be one longer than the number of tiles in this dimension
     yshape = y_edges.shape[0] - 1
     base_indices = np.arange(xshape * yshape).reshape(yshape, xshape)
-    x_idx = np.searchsorted(x_edges, x, side='right') - 1
-    y_idx = np.searchsorted(y_edges, y, side='right') - 1
-    return base_indices[y_idx, x_idx]
+    total_x_idx = []
+    total_y_idx = []
+    for x, y in zip(xdata, ydata):
+        total_x_idx.append(np.searchsorted(x_edges, x, side='right') - 1)
+        total_y_idx.append(np.searchsorted(y_edges, y, side='right') - 1)
+    total_x_idx = np.concatenate(total_x_idx)
+    total_y_idx = np.concatenate(total_y_idx)
+    return base_indices[total_y_idx, total_x_idx]
 
 
 def print_progress_bar(iteration, total, prefix='Progress:', suffix='Complete', decimals=1, length=70, fill='█', print_end="\r"):
