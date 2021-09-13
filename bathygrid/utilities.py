@@ -154,9 +154,11 @@ def bin2d_with_indices(x: Union[darray, np.array], y: Union[darray, np.array], x
     """
 
     if isinstance(x, np.ndarray) and isinstance(y, np.ndarray):
+        isdask = False
         xdata = [x]
         ydata = [y]
     elif isinstance(x, darray) and isinstance(y, darray):
+        isdask = True
         xdata = [x.partitions[i] for i in range(x.npartitions)]
         ydata = [y.partitions[i] for i in range(y.npartitions)]
     else:
@@ -170,6 +172,9 @@ def bin2d_with_indices(x: Union[darray, np.array], y: Union[darray, np.array], x
     total_x_idx = []
     total_y_idx = []
     for x, y in zip(xdata, ydata):
+        if isdask:
+            x = x.compute()
+            y = y.compute()
         total_x_idx.append(np.searchsorted(x_edges, x, side='right') - 1)
         total_y_idx.append(np.searchsorted(y_edges, y, side='right') - 1)
     total_x_idx = np.concatenate(total_x_idx)
