@@ -57,6 +57,8 @@ class BaseStorage(BathyGrid):
             raise EnvironmentError('Unable to load json file from {}, does not exist'.format(folderpath))
         with open(fileout, 'r') as fout:
             data = json.load(fout)
+        if 'output_folder' in data:
+            data.pop('output_folder')
         for ky in bathygrid_numpy_to_list:
             data[ky] = np.array(data[ky])
         for ky in bathygrid_float_to_str:
