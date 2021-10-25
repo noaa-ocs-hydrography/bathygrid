@@ -163,12 +163,13 @@ def test_SRGrid_grid_mean():
     assert not bg.no_grid
     assert res == [1.0]
     assert bg.data is None  # after adding we clear the point data to free memory
-    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
-    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 31457280
-    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 2500
+    lyrs = bg.get_layers_by_name(['depth', 'density', 'horizontal_uncertainty', 'vertical_uncertainty'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == 31457280
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(lyrs[1]) == np.count_nonzero(~np.isnan(lyrs[2])) == np.count_nonzero(~np.isnan(lyrs[3])) == 2500
     assert lyrs[0][848, 0] == 20.0
-    assert lyrs[1][848, 0] == 0.5
-    assert lyrs[2][848, 0] == 1.0
+    assert lyrs[1][848, 0] == 1
+    assert lyrs[2][848, 0] == 0.5
+    assert lyrs[3][848, 0] == 1.0
 
 
 def test_SRGrid_grid_shoalest():
@@ -181,12 +182,30 @@ def test_SRGrid_grid_shoalest():
     assert not bg.no_grid
     assert res == [1.0]
     assert bg.data is None  # after adding we clear the point data to free memory
-    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
-    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 31457280
-    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 2500
+    lyrs = bg.get_layers_by_name(['depth', 'density', 'horizontal_uncertainty', 'vertical_uncertainty'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == 31457280
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(lyrs[1]) == np.count_nonzero(~np.isnan(lyrs[2])) == np.count_nonzero(~np.isnan(lyrs[3])) == 2500
     assert lyrs[0][848, 0] == 20.0
-    assert lyrs[1][848, 0] == 0.5
-    assert lyrs[2][848, 0] == 1.0
+    assert lyrs[1][848, 0] == 1
+    assert lyrs[2][848, 0] == 0.5
+    assert lyrs[3][848, 0] == 1.0
+
+
+def test_auto_resolution_methods():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.is_empty
+    assert bg.no_grid
+
+    # start with the basic lookup-the-mean-depth-to-get-resolution method
+    res = bg.grid(resolution=None, algorithm='mean', auto_resolution_mode='depth')
+    assert bg.mean_depth == 25.0
+    assert depth_resolution_lookup[20] == 0.5
+    assert depth_resolution_lookup[40] == 1.0
+    assert res == bg.resolutions == [1.0]
+    # now illustrate the more complex density based method
+    res = bg.grid(resolution=None, algorithm='mean', auto_resolution_mode='density')
+    assert res == bg.resolutions == [256.0]
 
 
 def test_SRGrid_get_layer_by_name():
@@ -199,31 +218,32 @@ def test_SRGrid_get_layer_by_name():
     assert not bg.no_grid
     assert res == [1.0]
     assert bg.data is None  # after adding we clear the point data to free memory
-    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
-    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 31457280
-    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 2500
+    lyrs = bg.get_layers_by_name(['depth', 'density', 'horizontal_uncertainty', 'vertical_uncertainty'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == 31457280
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(lyrs[1]) == np.count_nonzero(~np.isnan(lyrs[2])) == np.count_nonzero(~np.isnan(lyrs[3])) == 2500
     assert lyrs[0][848, 0] == 20.0
-    assert lyrs[1][848, 0] == 0.5
-    assert lyrs[2][848, 0] == 1.0
+    assert lyrs[1][848, 0] == 1
+    assert lyrs[2][848, 0] == 0.5
+    assert lyrs[3][848, 0] == 1.0
 
     res = bg.grid(resolution=128, clear_existing=True)
     assert res == [128.0]
 
-    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'], nodatavalue=1000000,
-                                 z_positive_up=True)
-    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 1920
-    assert np.count_nonzero(lyrs[0] != 1000000) == np.count_nonzero(lyrs[1] != 1000000) == np.count_nonzero(
-        lyrs[2] != 1000000) == 1521
+    lyrs = bg.get_layers_by_name(['depth', 'density', 'horizontal_uncertainty', 'vertical_uncertainty'], nodatavalue=1000000, z_positive_up=True)
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == 1920
+    assert np.count_nonzero(lyrs[0] != 1000000) == np.count_nonzero(lyrs[1]) == np.count_nonzero(lyrs[2] != 1000000) == np.count_nonzero(lyrs[3] != 1000000) == 1521
     assert lyrs[0][6, 0] == approx(-20.002, 0.001)
-    assert lyrs[1][6, 0] == 0.5
-    assert lyrs[2][6, 0] == 1.0
+    assert lyrs[1][6, 0] == 2
+    assert lyrs[2][6, 0] == 0.5
+    assert lyrs[3][6, 0] == 1.0
 
-    lyrs = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'])
-    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == 1920
-    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[1])) == np.count_nonzero(~np.isnan(lyrs[2])) == 1521
+    lyrs = bg.get_layers_by_name(['depth', 'density', 'horizontal_uncertainty', 'vertical_uncertainty'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == 1920
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(lyrs[1]) == np.count_nonzero(~np.isnan(lyrs[2])) == np.count_nonzero(~np.isnan(lyrs[3])) == 1521
     assert lyrs[0][6, 0] == approx(20.002, 0.001)
-    assert lyrs[1][6, 0] == 0.5
-    assert lyrs[2][6, 0] == 1.0
+    assert lyrs[1][6, 0] == 2
+    assert lyrs[2][6, 0] == 0.5
+    assert lyrs[3][6, 0] == 1.0
 
 
 def test_SRGrid_get_trimmed_layer():
@@ -323,9 +343,9 @@ def test_VRGridTile_variable_rez_grid():
     expected_shape = [(192, 192), (96, 96), (48, 48)]
     expected_real = [471, 948, 1320]
     for cnt, resolution in enumerate(bg.resolutions):
-        layers = bg.get_layers_by_name(['depth', 'horizontal_uncertainty', 'vertical_uncertainty'], resolution=resolution)
+        layers = bg.get_layers_by_name(['depth', 'density', 'horizontal_uncertainty', 'vertical_uncertainty'], resolution=resolution)
         assert layers[0].shape == layers[1].shape == layers[2].shape == expected_shape[cnt]
-        assert np.count_nonzero(~np.isnan(layers[0])) == np.count_nonzero(~np.isnan(layers[1])) == np.count_nonzero(~np.isnan(layers[2])) == expected_real[cnt]
+        assert np.count_nonzero(~np.isnan(layers[0])) == np.count_nonzero(layers[1]) == np.count_nonzero(~np.isnan(layers[2])) == expected_real[cnt]
 
     assert bg.tiles.shape == (6, 6)
 
@@ -333,12 +353,14 @@ def test_VRGridTile_variable_rez_grid():
     assert bg.tiles[0][0].tiles.shape == (8, 8)
     assert bg.tiles[0][0].tiles[0][0] is None
     assert bg.tiles[0][0].tiles[7][7].cells[64.0]['depth'][1][1] == approx(671.073, 0.001)
+    assert bg.tiles[0][0].tiles[7][7].cells[64.0]['density'][1][1] == 49
     assert bg.tiles[0][0].tiles[7][7].cells[64.0]['horizontal_uncertainty'][1][1] == approx(0.519, 0.001)
     assert bg.tiles[0][0].tiles[7][7].cells[64.0]['vertical_uncertainty'][1][1] == approx(1.038, 0.001)
 
     assert bg.tiles[3][3].resolutions == [128.0]
     assert bg.tiles[3][3].tiles.shape == (8, 8)
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['depth'][0][0] == approx(3412.555, 0.001)
+    assert bg.tiles[3][3].tiles[7][7].cells[128.0]['density'][0][0] == 169
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['horizontal_uncertainty'][0][0] == approx(0.824, 0.001)
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['vertical_uncertainty'][0][0] == approx(1.647, 0.001)
 
@@ -368,12 +390,12 @@ def test_return_layer_names():
     bg = SRGrid(tile_size=1024)
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
-    assert bg.return_layer_names() == ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']
+    assert bg.return_layer_names() == ['depth', 'density', 'vertical_uncertainty', 'horizontal_uncertainty']
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
-    assert bg.return_layer_names() == ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']
+    assert bg.return_layer_names() == ['depth', 'density', 'vertical_uncertainty', 'horizontal_uncertainty']
 
 
 def test_only_z_data():

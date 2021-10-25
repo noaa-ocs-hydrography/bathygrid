@@ -4,25 +4,27 @@ from test_data.test_data import get_grid_data
 
 
 def test_grid_mean():
-    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_grid_data()
-    np_grid_mean(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
+    depth, tvu, thu, cell_indices, grid, density_grid, tvugrid, thugrid = get_grid_data()
+    np_grid_mean(depth, cell_indices, grid, density_grid, tvu, thu, tvugrid, thugrid)
     dpthgrid = np.round(grid, 3)
     tvugrid = np.round(tvugrid, 3)
     thugrid = np.round(thugrid, 3)
-    unique_indices = np.unique(cell_indices)
-    for unq in unique_indices:
+    unique_indices, ucounts = np.unique(cell_indices, return_counts=True)
+    for unq, ucnt in zip(unique_indices, ucounts):
         assert np.round(np.mean(depth[cell_indices == unq]), 3) == dpthgrid.flat[unq]
         assert np.round(np.mean(tvu[cell_indices == unq]), 3) == tvugrid.flat[unq]
         assert np.round(np.mean(thu[cell_indices == unq]), 3) == thugrid.flat[unq]
+        assert density_grid.flat[unq] == ucnt
 
 
 def test_grid_mean_onlydepth():
-    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_grid_data()
-    np_grid_mean(depth, cell_indices, grid)
+    depth, tvu, thu, cell_indices, grid, density_grid, tvugrid, thugrid = get_grid_data()
+    np_grid_mean(depth, cell_indices, grid, density_grid)
     dpthgrid = np.round(grid, 3)
-    unique_indices = np.unique(cell_indices)
-    for unq in unique_indices:
+    unique_indices, ucounts = np.unique(cell_indices, return_counts=True)
+    for unq, ucnt in zip(unique_indices, ucounts):
         assert np.round(np.mean(depth[cell_indices == unq]), 3) == dpthgrid.flat[unq]
+        assert density_grid.flat[unq] == ucnt
 
 
 # def test_grid_numba_numpy_mean():
@@ -46,27 +48,29 @@ def test_grid_mean_onlydepth():
 
 
 def test_grid_shoalest():
-    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_grid_data()
-    np_grid_shoalest(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
+    depth, tvu, thu, cell_indices, grid, density_grid, tvugrid, thugrid = get_grid_data()
+    np_grid_shoalest(depth, cell_indices, grid, density_grid, tvu, thu, tvugrid, thugrid)
     dpthgrid = np.round(grid, 3)
     tvugrid = np.round(tvugrid, 3)
     thugrid = np.round(thugrid, 3)
-    unique_indices = np.unique(cell_indices)
-    for unq in unique_indices:
+    unique_indices, ucounts = np.unique(cell_indices, return_counts=True)
+    for unq, ucnt in zip(unique_indices, ucounts):
         min_depth_idx = depth[cell_indices == unq].argmin()
         assert np.round(depth[cell_indices == unq][min_depth_idx], 3) == dpthgrid.flat[unq]
         assert np.round(tvu[cell_indices == unq][min_depth_idx], 3) == tvugrid.flat[unq]
         assert np.round(thu[cell_indices == unq][min_depth_idx], 3) == thugrid.flat[unq]
+        assert density_grid.flat[unq] == ucnt
 
 
 def test_grid_shoalest_onlydepth():
-    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = get_grid_data()
-    np_grid_shoalest(depth, cell_indices, grid)
+    depth, tvu, thu, cell_indices, grid, density_grid, tvugrid, thugrid = get_grid_data()
+    np_grid_shoalest(depth, cell_indices, grid, density_grid)
     dpthgrid = np.round(grid, 3)
-    unique_indices = np.unique(cell_indices)
-    for unq in unique_indices:
+    unique_indices, ucounts = np.unique(cell_indices, return_counts=True)
+    for unq, ucnt in zip(unique_indices, ucounts):
         min_depth_idx = depth[cell_indices == unq].argmin()
         assert np.round(depth[cell_indices == unq][min_depth_idx], 3) == dpthgrid.flat[unq]
+        assert density_grid.flat[unq] == ucnt
 
 
 # def test_grid_numba_numpy_shoalest():

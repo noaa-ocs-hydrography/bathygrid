@@ -2,7 +2,7 @@ import numba
 import numpy as np
 
 
-def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = np.array([]),
+def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, density_grid: np.ndarray, tvu: np.array = np.array([]),
                  thu: np.array = np.array([]), tvu_grid: np.ndarray = np.array([[]]), thu_grid: np.ndarray = np.array([[]])):
     """
     Arithmetic mean of each cell depth/uncertainty point values.
@@ -15,6 +15,8 @@ def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu:
         1d index of which cell each point belongs to
     grid
         empty 2d grid of depth values
+    density_grid
+        empty 2d grid of density values
     tvu
         Optional, 1d array of point vertical uncertainty values
     thu
@@ -48,6 +50,7 @@ def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu:
     depth_sum = np.add.reduceat(depth[cell_sort], uidx, axis=0)
     depth_mean = depth_sum / ucounts
     grid[urow, ucol] = depth_mean
+    density_grid[urow, ucol] = ucounts
     if tvu_enabled:
         tvu_sum = np.add.reduceat(tvu[cell_sort], uidx, axis=0)
         tvu_mean = tvu_sum / ucounts
@@ -60,7 +63,7 @@ def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu:
     return grid, tvu_grid, thu_grid
 
 
-def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, tvu: np.array = np.array([]),
+def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, density_grid: np.ndarray, tvu: np.array = np.array([]),
                      thu: np.array = np.array([]), tvu_grid: np.ndarray = np.array([]), thu_grid: np.ndarray = np.array([])):
     """
     Calculate the shoalest depth value of all points in each cell.  Take that depth/uncertainty value and use it for
@@ -74,6 +77,8 @@ def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
         1d index of which cell each point belongs to
     grid
         empty 2d grid of depth values
+    density_grid
+        empty 2d grid of density values
     tvu
         Optional, 1d array of point vertical uncertainty values
     thu
@@ -106,6 +111,7 @@ def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
 
     depth_min = np.minimum.reduceat(depth[cell_sort], uidx, axis=0)
     grid[urow, ucol] = depth_min
+    density_grid[urow, ucol] = ucounts
 
     depth_idx = None
     if tvu_enabled or thu_enabled:

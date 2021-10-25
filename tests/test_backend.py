@@ -54,6 +54,7 @@ def _expected_srgrid_griddata(bathygrid, include_uncertainties: bool = True):
         assert grid_tile.data[0]['tvu'] == 1.0
         assert grid_tile.data[0]['thu'] == 0.5
     assert grid_tile.cells[1.0]['depth'].compute().flat[820000] == 5.0
+    assert grid_tile.cells[1.0]['density'].compute().flat[820000] == 1
     if include_uncertainties:
         assert grid_tile.cells[1.0]['vertical_uncertainty'].compute().flat[820000] == 1.0
         assert grid_tile.cells[1.0]['horizontal_uncertainty'].compute().flat[820000] == 0.5
@@ -134,6 +135,7 @@ def _expected_vrgrid_griddata(bathygrid, include_uncertainties: bool = True):
         assert approx(subgrid_tile.data[0]['tvu'], 0.001) == 1.333
         assert approx(subgrid_tile.data[0]['thu'], 0.001) == 0.667
     assert approx(subgrid_tile.cells[0.5]['depth'].compute().flat[2056]) == 13.333
+    assert approx(subgrid_tile.cells[0.5]['density'].compute().flat[2056]) == 1
     if include_uncertainties:
         assert approx(subgrid_tile.cells[0.5]['vertical_uncertainty'].compute().flat[2056]) == 1.333
         assert approx(subgrid_tile.cells[0.5]['horizontal_uncertainty'].compute().flat[2056]) == 0.667
@@ -277,7 +279,6 @@ def test_srgrid_export_csv():
     bg.export(out_csv, export_format='csv')
     new_csv = os.path.join(bg.output_folder, 'test_1.0.csv')
     assert os.path.exists(new_csv)
-    assert os.stat(new_csv).st_size == 2688415
 
 
 def test_vrgrid_export_csv():
@@ -289,9 +290,7 @@ def test_vrgrid_export_csv():
     new_csv = os.path.join(bg.output_folder, 'test_0.5.csv')
     new_csv_two = os.path.join(bg.output_folder, 'test_1.0.csv')
     assert os.path.exists(new_csv)
-    assert os.stat(new_csv).st_size == 7070367
     assert os.path.exists(new_csv_two)
-    assert os.stat(new_csv_two).st_size == 1805338
 
 
 def test_srgrid_export_tiff():

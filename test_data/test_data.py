@@ -141,9 +141,10 @@ def get_grid_data():
     thu = np.linspace(0.5, 1.5, 20)
     cell_indices = np.array([3, 1, 0, 2, 1, 0, 0, 7, 7, 2, 5, 4, 5, 4, 5, 6, 5, 6, 3, 3])
     grid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
+    density_grid = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
     tvugrid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
     thugrid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
-    return depth, tvu, thu, cell_indices, grid, tvugrid, thugrid
+    return depth, tvu, thu, cell_indices, grid, density_grid, tvugrid, thugrid
 
 
 def get_test_path():

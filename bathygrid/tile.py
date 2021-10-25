@@ -2,7 +2,7 @@ import numpy as np
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
 from bathygrid.algorithms import np_grid_mean, np_grid_shoalest
-from bathygrid.grid_variables import depth_resolution_lookup
+from bathygrid.grid_variables import depth_resolution_lookup, minimum_points_per_cell, check_cells_percentage
 
 
 class Tile(TileGrid):
@@ -59,7 +59,7 @@ class SRTile(Tile):
             final_count[rez] = int(np.count_nonzero(~np.isnan(self.cells[rez]['depth'])))
         return final_count
 
-    def _calculate_resolution(self):
+    def _calculate_resolution_lookup(self):
         """
         Use the depth resolution lookup to find the appropriate depth resolution band.  The lookup is the max depth and
         the resolution that applies.
@@ -162,6 +162,7 @@ class SRTile(Tile):
         self.cells[resolution] = {}
         if algorithm in ['mean', 'shoalest']:
             self.cells[resolution]['depth'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
+            self.cells[resolution]['density'] = np.full(grid_shape, 0, dtype=int)
             if self.data is not None and 'tvu' in self.data.dtype.names:
                 self.cells[resolution]['vertical_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
             if self.data is not None and 'thu' in self.data.dtype.names:
@@ -192,7 +193,7 @@ class SRTile(Tile):
             depth_val = self.data['z'].compute()
         else:
             depth_val = self.data['z']
-        np_grid_mean(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'],
+        np_grid_mean(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'], self.cells[resolution]['density'],
                      vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
         if vert_val.size > 0:
@@ -225,7 +226,7 @@ class SRTile(Tile):
             depth_val = self.data['z'].compute()
         else:
             depth_val = self.data['z']
-        np_grid_shoalest(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'],
+        np_grid_shoalest(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'], self.cells[resolution]['density'],
                          vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
         if vert_val.size > 0:
@@ -233,7 +234,94 @@ class SRTile(Tile):
         if horiz_val.size > 0:
             self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
-    def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, regrid_option: str = '', progress_bar: bool = False):
+    def _assess_resolution(self, resolution: float = None):
+        """
+        Using the points in this tile, assess the given resolution to determine if it is too coarse or too fine.  We use
+        the grid_variables minimum_points_per_cell as the ideal points per cell.  If 95% of the cells contain at least
+        this many points and not more than 4 times this many points, the resolution is deemed good.
+
+        Parameters
+        ----------
+        resolution
+            resolution of the grid in x/y units
+
+        Returns
+        -------
+        bool
+            if True, resolution is deemed good
+        str
+            string qualifier, if LOW resolution is too low, if HIGH resolution is too high, if empty string the resolution is good
+
+        """
+        grid_x = np.arange(self.min_x, self.max_x, resolution)
+        grid_y = np.arange(self.min_y, self.max_y, resolution)
+        cell_edges_x = np.append(grid_x, grid_x[-1] + resolution)
+        cell_edges_y = np.append(grid_y, grid_y[-1] + resolution)
+        cell_indices = bin2d_with_indices(self.data['x'], self.data['y'], cell_edges_x, cell_edges_y)
+        uniqs, counts = np.unique(cell_indices, return_counts=True)
+        # if there are less than minimum_points_per_cell in any cell, the resolution is too fine
+        too_fine = (counts < minimum_points_per_cell)
+        # if there are greater than minimum_points_per_cell * 4 in all cells, the resolution is too coarse
+        # mulitply by 4 as the cell is split into 4 more cells if we use a finer resolution
+        too_coarse = (counts > minimum_points_per_cell * 4)
+
+        # 95 percent of cells have too fine a resolution
+        if np.count_nonzero(too_fine) / len(uniqs) >= check_cells_percentage:
+            return False, 'LOW'
+        # 95 percent of cells have too coarse a resolution
+        elif np.count_nonzero(too_coarse) / len(uniqs) >= check_cells_percentage:
+            return False, 'HIGH'
+        else:
+            return True, ''
+
+    def resolution_by_density(self, starting_resolution: float = None):
+        """
+        A recursive check with the points in this tile to identify the best resolution based on density.  We start with
+        the depth resolution lookup resolution, binning the points and determining if grid_variables.check_cells_percentage
+        of the cells have the appropriate number of points per cell, see grid_variables.minimum_points_per_cell.  We then
+        rerun this check until we settle on the appropriate resolution.
+
+        Parameters
+        ----------
+        starting_resolution
+            the first resolution to evaluate, will go up/down from this resolution in the iterative check
+
+        Returns
+        -------
+        float
+            resolution to use based on the density of the points in the tile
+        """
+
+        rez_options = list(depth_resolution_lookup.values())
+        if not starting_resolution:
+            starting_resolution = self._calculate_resolution_lookup()
+        else:
+            if starting_resolution not in rez_options:
+                raise ValueError('Provided resolution {} is not one of the valid resolution options: {}'.format(starting_resolution, rez_options))
+        valid_rez = False
+        checked_rez = []
+        current_rez = starting_resolution
+        while not valid_rez:
+            valid_rez, rez_adjustment = self._assess_resolution(current_rez)
+            checked_rez.append(current_rez)
+            curr_rez_index = rez_options.index(current_rez)
+            # if you hit the resolution limit in available resolutions, just stop there
+            # also, if this is a good resolution, stop here
+            if valid_rez or (curr_rez_index == 0 and rez_adjustment == 'HIGH') or (curr_rez_index == len(rez_options) - 1 and rez_adjustment == 'LOW'):
+                return current_rez
+            # get the next lower resolution
+            elif rez_adjustment == 'HIGH':
+                current_rez = rez_options[curr_rez_index - 1]
+            # get the next higher resolution
+            elif rez_adjustment == 'LOW':
+                current_rez = rez_options[curr_rez_index + 1]
+            # if you are about to check a resolution that has been checked already (i.e. you are going back and forth
+            #   between resolutions) go with this one, prevents the recursive loop
+            if current_rez in checked_rez:
+                return current_rez
+
+    def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
+             regrid_option: str = '', progress_bar: bool = False):
         """
         Grid the Tile data using the provided algorithm and resolution.  Stores the gridded data in the Tile
 
@@ -245,10 +333,12 @@ class SRTile(Tile):
             algorithm to grid by
         clear_existing
             If True, clears all the existing gridded data associated with the tile
+        auto_resolution_mode
+            one of density, depth; chooses the algorithm used to determine the resolution for the tile
         regrid_option
             a place holder to match the bgrid grid method
         progress_bar
-            if True, show a progress bar
+            a place holder to match the bgrid grid method
 
         Returns
         -------
@@ -257,7 +347,12 @@ class SRTile(Tile):
         """
 
         if resolution is None:
-            resolution = self._calculate_resolution()
+            if auto_resolution_mode == 'depth':
+                resolution = self._calculate_resolution_lookup()
+            elif auto_resolution_mode == 'density':
+                resolution = self.resolution_by_density()
+            else:
+                raise ValueError('Tile given no resolution and an option of {} which is not supported'.format(auto_resolution_mode))
         if not is_power_of_two(resolution):
             raise ValueError(f'Tile: Resolution must be a power of two, got {resolution}')
         if clear_existing:
@@ -274,6 +369,7 @@ class SRTile(Tile):
             self.cell_indices[resolution] = np.array(self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
             if not isinstance(self.cells[resolution]['depth'], np.ndarray):
                 self.cells[resolution]['depth'] = self.cells[resolution]['depth'].compute()
+                self.cells[resolution]['density'] = self.cells[resolution]['density'].compute()
                 if 'vertical_uncertainty' in self.cells[resolution]:
                     self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution]['vertical_uncertainty'].compute()
                 if 'horizontal_uncertainty' in self.cells[resolution]:
@@ -283,11 +379,12 @@ class SRTile(Tile):
                 self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points], self.data['y'][new_points],
                                                                                self.cell_edges_x[resolution], self.cell_edges_y[resolution])
 
-            self.cells[resolution]['depth'] = np.full(self.cells[resolution]['depth'].shape, np.nan)
+            self.cells[resolution]['depth'] = np.full(self.cells[resolution]['depth'].shape, np.nan, dtype=np.float32)
+            self.cells[resolution]['density'] = np.full(self.cells[resolution]['density'].shape, 0, dtype=int)
             if 'vertical_uncertainty' in self.cells[resolution]:
-                self.cells[resolution]['vertical_uncertainty'] = np.full(self.cells[resolution]['vertical_uncertainty'].shape, np.nan)
+                self.cells[resolution]['vertical_uncertainty'] = np.full(self.cells[resolution]['vertical_uncertainty'].shape, np.nan, dtype=np.float32)
             if 'horizontal_uncertainty' in self.cells[resolution]:
-                self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan)
+                self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan, dtype=np.float32)
 
         if algorithm == 'mean':
             self._run_mean_grid(resolution)
@@ -318,9 +415,15 @@ class SRTile(Tile):
         Union[da.Array, np.ndarray]
             2d array of the gridded data
         """
-
-        # ensure nodatavalue is a float32
-        nodatavalue = np.float32(nodatavalue)
+        if layer in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']:
+            # ensure nodatavalue is a float32
+            nodatavalue = np.float32(nodatavalue)
+        elif layer == 'density':
+            # density has to have an integer based nodatavalue
+            try:
+                nodatavalue = np.int(nodatavalue)
+            except ValueError:
+                nodatavalue = 0
         if self.is_empty:
             return None
         if not resolution and len(list(self.cells.keys())) > 1:

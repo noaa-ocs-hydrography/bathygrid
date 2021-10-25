@@ -294,16 +294,20 @@ class SRGrid(NumpyGrid):
             xx, yy = np.meshgrid(x, y)
             dataset = [xx.ravel(), yy.ravel()]
             dnames = ['x', 'y']
+            dfmt = ['%.3f', '%.3f']
             for cnt, lname in enumerate(lyrs):
                 if lname == 'depth' and z_positive_up:
                     lyrdata[cnt] = lyrdata[cnt] * -1
                     lname = 'elevation'
                 dataset += [lyrdata[cnt].ravel()]
                 dnames += [lname]
-
+                if lname == 'density':
+                    dfmt += ['%i']
+                else:
+                    dfmt += ['%.3f']
             sortidx = np.argsort(dataset[0])
             np.savetxt(resfile, np.stack([d[sortidx] for d in dataset], axis=1),
-                       fmt=['%.3f' for d in dataset], delimiter=' ', comments='',
+                       fmt=dfmt, delimiter=' ', comments='',
                        header=' '.join([nm for nm in dnames]))
 
     def _export_geotiff(self, filepath: str, z_positive_up: bool = True, resolution: float = None):
@@ -320,7 +324,7 @@ class SRGrid(NumpyGrid):
             if provided, will only export the given resolution
         """
 
-        lyrtranslator = {'depth': 'Depth', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
+        lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
                          'horizontal_uncertainty': 'Horizontal Uncertainty'}
         nodatavalue = 1000000.0
         basefile, baseext = os.path.splitext(filepath)
@@ -377,7 +381,7 @@ class SRGrid(NumpyGrid):
                        'VAR_OTHER_CONSTRAINTS=' + other_constraints, 'VAR_CLASSIFICATION=' + classification,
                        'VAR_SECURITY_USER_NOTE=' + security_user_note]
 
-        lyrtranslator = {'depth': 'Depth', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
+        lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
                          'horizontal_uncertainty': 'Horizontal Uncertainty'}
         nodatavalue = 1000000.0
         z_positive_up = True

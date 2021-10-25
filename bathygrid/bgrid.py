@@ -11,6 +11,7 @@ from bathygrid.tile import SRTile, Tile
 from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar, \
     utc_seconds_to_formatted_string, formatted_string_to_utc_seconds
 from bathygrid.grid_variables import depth_resolution_lookup, maximum_chunk_dimension
+from bathygrid.__version__ import __version__ as bathyvers
 
 
 class BathyGrid(BaseGrid):
@@ -49,6 +50,7 @@ class BathyGrid(BaseGrid):
         self.sub_type = 'srtile'
         self.storage_type = 'numpy'
         self.client = None
+        self.version = bathyvers
 
     @property
     def no_grid(self):
@@ -218,7 +220,7 @@ class BathyGrid(BaseGrid):
         else:
             self.mean_depth = np.round(self.data['z'].mean(), 3)
 
-    def _calculate_resolution(self):
+    def _calculate_resolution_lookup(self):
         """
         Use the depth resolution lookup to find the appropriate depth resolution band.  The lookup is the max depth and
         the resolution that applies.
@@ -238,6 +240,33 @@ class BathyGrid(BaseGrid):
         # ensure that resolution does not exceed the tile size for obvious reasons
         clipped_rez = min(self.tile_size, calc_resolution)
         return float(clipped_rez)
+
+    def resolution_by_density(self, starting_resolution: float = None):
+        """
+        Determine the resolution according to the density of the points in all tiles, returns the coarsest resolution
+        determined for the tiles in this grid.  See tile.resolution_by_density
+
+        Parameters
+        ----------
+        starting_resolution
+            the first resolution to evaluate, will go up/down from this resolution in the iterative check
+
+        Returns
+        -------
+        float
+            coarsest resolution amongst all tiles
+        """
+
+        rez_options = []
+        for row in self.tiles:
+            for tile in row:
+                if tile:
+                    starting_resolution = tile.resolution_by_density(starting_resolution)
+                    rez_options.append(starting_resolution)
+        if rez_options:
+            return max(rez_options)
+        else:
+            return 0.0
 
     def _build_tile(self, tile_x_origin: float, tile_y_origin: float):
         """
@@ -266,7 +295,7 @@ class BathyGrid(BaseGrid):
 
         return np.full((self.tile_size, self.tile_size), np.nan)
 
-    def _build_layer_grid(self, resolution: float, nodatavalue: float = np.float32(np.nan)):
+    def _build_layer_grid(self, resolution: float, layername: str, nodatavalue: float = np.float32(np.nan)):
         """
         Build a 2d array of NaN for the size of the whole BathyGrid (given the provided resolution)
 
@@ -276,8 +305,15 @@ class BathyGrid(BaseGrid):
             float resolution that we want to use to build the grid
         """
 
-        # ensure nodatavalue is a float32
-        nodatavalue = np.float32(nodatavalue)
+        if layername in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']:
+            # ensure nodatavalue is a float32
+            nodatavalue = np.float32(nodatavalue)
+        elif layername == 'density':
+            # density has to have an integer based nodatavalue
+            try:
+                nodatavalue = np.int(nodatavalue)
+            except ValueError:
+                nodatavalue = 0
         y_size = self.height / resolution
         x_size = self.width / resolution
         assert y_size.is_integer()
@@ -591,14 +627,21 @@ class BathyGrid(BaseGrid):
             dictionary of gridded data, ex: {'depth': np.array([[....})
         """
         finaldata = {}
-        # ensure nodatavalue is a float32
-        nodatavalue = np.float32(nodatavalue)
         # normalize the column/row indices, the data and the geotransform yielded here are just for this chunk
         mincol = min(column_indices)
         curdcol = [col - mincol for col in column_indices]
         minrow = min(row_indices)
         curdrow = [row - minrow for row in row_indices]
         for lyr in layers:
+            if lyr in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']:
+                # ensure nodatavalue is a float32
+                nodatavalue = np.float32(nodatavalue)
+            elif lyr == 'density':
+                # density has to have an integer based nodatavalue
+                try:
+                    nodatavalue = np.int(nodatavalue)
+                except ValueError:
+                    nodatavalue = 0
             finaldata[lyr] = np.full((max(curdcol) + cells_per_tile, max(curdrow) + cells_per_tile), nodatavalue)
             for cnt, data in enumerate(layerdata):
                 if lyr in data:
@@ -709,7 +752,7 @@ class BathyGrid(BaseGrid):
             if len(self.resolutions) > 1:
                 raise ValueError('BathyGrid: you must specify a resolution to return layer data when multiple resolutions are found')
             resolution = self.resolutions[0]
-        data = [self._build_layer_grid(resolution, nodatavalue=nodatavalue) for lyr in layer]
+        data = [self._build_layer_grid(resolution, layername=lyr, nodatavalue=nodatavalue) for lyr in layer]
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
                 col, row = self._tile_idx_to_row_col(cnt)
@@ -772,7 +815,7 @@ class BathyGrid(BaseGrid):
 
         return data, [rmin, cmin], [rmax, cmax]
 
-    def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: bool,
+    def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: str,
                       progress_bar: bool = True):
         """
         Run the gridding without Dask, Tile after Tile.
@@ -790,7 +833,8 @@ class BathyGrid(BaseGrid):
             regrid the entire grid.  Update mode will only update those tiles that have a point_count_changed=True.  If clear_existing is True, will
             automatically run in 'full' mode
         auto_resolution
-            if True and the tile type supports it, allow the tile to auto calculate the appropriate resolution
+            if density or depth, allow the tile to auto calculate the appropriate resolution.  If empty string, do not
+            support resolution determination
         progress_bar
             if True, display a progress bar
         """
@@ -809,11 +853,11 @@ class BathyGrid(BaseGrid):
                                 self.resolutions.append(rz)
                         continue
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
-                    rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+                    rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
                 elif isinstance(tile, SRTile) and auto_resolution and self.name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
-                    rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+                    rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
                 else:
-                    rez = tile.grid(algorithm, resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+                    rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
                 if isinstance(rez, float) or isinstance(rez, int):
                     rez = [rez]
                 for rz in rez:
@@ -850,7 +894,7 @@ class BathyGrid(BaseGrid):
         resolutions = None
         results = None
 
-    def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: bool,
+    def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: str,
                        progress_bar: bool = True):
         """
         Use Dask to submit the tiles in parallel to the cluster for processing.  Probably should think up a more
@@ -870,7 +914,8 @@ class BathyGrid(BaseGrid):
             regrid the entire grid.  Update mode will only update those tiles that have a point_count_changed=True.  If clear_existing is True, will
             automatically run in 'full' mode
         auto_resolution
-            if True and the tile type supports it, allow the tile to auto calculate the appropriate resolution
+            if density or depth, allow the tile to auto calculate the appropriate resolution.  If empty string, do not
+            support resolution determination
         progress_bar
             if True, display a progress bar
         """
@@ -913,7 +958,7 @@ class BathyGrid(BaseGrid):
         self.resolutions = np.sort(np.unique(self.resolutions)).tolist()
         self._save_grid()
 
-    def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False,
+    def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
              regrid_option: str = 'full', use_dask: bool = False, progress_bar: bool = True):
         """
         Gridding involves calling 'grid' on all child grids/tiles until you eventually call 'grid' on a Tile.  The Tiles
@@ -927,6 +972,8 @@ class BathyGrid(BaseGrid):
             algorithm to grid by
         clear_existing
             if True, will clear out any existing grids before generating this one.
+        auto_resolution_mode
+            one of density, depth; chooses the algorithm used to determine the resolution for the grid/tile
         regrid_option
             controls what parts of the grid will get re-gridded if regrid is True and clear_existing is False, one of 'full', 'update'.  Full mode will
             regrid the entire grid.  Update mode will only update those tiles that have a point_count_changed=True.  If clear_existing is True, will
@@ -949,11 +996,14 @@ class BathyGrid(BaseGrid):
             resolution = float(resolution)
         if self.is_empty:
             raise ValueError('BathyGrid: Grid is empty, no points have been added')
-        auto_resolution = False
+        auto_resolution = ''
         if resolution is None:
-            auto_resolution = True
-            self.grid_resolution = 'AUTO'
-            resolution = self._calculate_resolution()
+            auto_resolution = auto_resolution_mode.lower()
+            self.grid_resolution = 'AUTO_{}'.format(auto_resolution_mode).upper()
+            if auto_resolution == 'depth':
+                resolution = self._calculate_resolution_lookup()
+            elif auto_resolution == 'density':
+                resolution = self.resolution_by_density()
         self.resolutions = []
 
         if use_dask:
@@ -996,7 +1046,7 @@ class BathyGrid(BaseGrid):
         Returns
         -------
         list
-            list of str surface layer names (ex: ['depth', 'horizontal_uncertainty', 'vertical_uncertainty']
+            list of str surface layer names (ex: ['depth', 'density', 'horizontal_uncertainty', 'vertical_uncertainty']
         """
 
         if self.no_grid:
@@ -1212,9 +1262,9 @@ def _gridding_parallel(data_blob: list):
     """
     tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name = data_blob
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
-        rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+        rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     elif isinstance(tile, SRTile) and auto_resolution and grid_name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
-        rez = tile.grid(algorithm, None, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+        rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     else:
-        rez = tile.grid(algorithm, resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+        rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     return rez, tile

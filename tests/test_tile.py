@@ -191,3 +191,17 @@ def test_get_layers_by_name_params():
     layer_data = til.get_layers_by_name('depth', nodatavalue=1000000, z_positive_up=True)
     assert layer_data[0][0] == np.float32(1000000)
     assert layer_data[3][2] == np.float32(-9.464)
+
+
+def test_resolution_by_density():
+    til = SRTile(0.0, 0.0, 1024)
+    til.add_points(smileyface, 'test1')
+    assert til.resolution_by_density() == 256.0
+    # even if you start at a different resolution, you eventually get the same answer
+    assert til.resolution_by_density(starting_resolution=0.5) == 256.0
+    # provided starter resolution must be one of the valid powers of two
+    try:
+        til.resolution_by_density(starting_resolution=666)
+        assert False
+    except ValueError:
+        assert True
