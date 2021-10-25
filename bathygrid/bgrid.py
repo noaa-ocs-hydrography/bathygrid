@@ -1000,10 +1000,11 @@ class BathyGrid(BaseGrid):
         if resolution is None:
             auto_resolution = auto_resolution_mode.lower()
             self.grid_resolution = 'AUTO_{}'.format(auto_resolution_mode).upper()
-            if auto_resolution == 'depth':
-                resolution = self._calculate_resolution_lookup()
-            elif auto_resolution == 'density':
-                resolution = self.resolution_by_density()
+            if self.name != 'VRGridTile_Root':
+                if auto_resolution == 'depth':
+                    resolution = self._calculate_resolution_lookup()
+                elif auto_resolution == 'density':
+                    resolution = self.resolution_by_density()
         self.resolutions = []
 
         if use_dask:
