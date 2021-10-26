@@ -196,9 +196,9 @@ def test_get_layers_by_name_params():
 def test_resolution_by_density():
     til = SRTile(0.0, 0.0, 1024)
     til.add_points(smileyface, 'test1')
-    assert til.resolution_by_density() == 256.0
+    assert til.resolution_by_density() == 1024.0
     # even if you start at a different resolution, you eventually get the same answer
-    assert til.resolution_by_density(starting_resolution=0.5) == 256.0
+    assert til.resolution_by_density(starting_resolution=0.5) == 1024.0
     # provided starter resolution must be one of the valid powers of two
     try:
         til.resolution_by_density(starting_resolution=666)

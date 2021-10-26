@@ -264,6 +264,8 @@ class SRTile(Tile):
         # if there are greater than minimum_points_per_cell * 4 in all cells, the resolution is too coarse
         # mulitply by 4 as the cell is split into 4 more cells if we use a finer resolution
         too_coarse = (counts > minimum_points_per_cell * 4)
+        # check to see if all cells in grid are populated by points
+        # fully_populated = len(uniqs) == grid_x.shape[0] * grid_y.shape[0]
 
         # if any cells have less than minimum points, this resolution is too low
         if too_fine.any():

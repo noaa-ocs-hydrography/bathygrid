@@ -115,7 +115,7 @@ def _expected_vrgrid_data(bathygrid):
 
 def _expected_vrgrid_griddata(bathygrid, include_uncertainties: bool = True):
     assert bathygrid.mean_depth == 17.5
-    assert np.array_equal(bathygrid.resolutions, np.array([0.5, 1.0]))
+    assert np.array_equal(bathygrid.resolutions, np.array([0.25, 0.5, 1.0]))
     assert bathygrid.grid_algorithm == 'mean'
 
     subgrid = bathygrid.tiles[0][0]
@@ -214,7 +214,7 @@ def test_vrgrid_grid_update():
     assert bg.cell_count == {1.0: 106, 0.5: 6}
     bg.remove_points('test2')
     bg.grid()
-    assert bg.cell_count == {0.5: 10, 1.0: 10}
+    assert bg.cell_count == {0.25: 3, 0.5: 10, 1.0: 10}
 
 
 def test_srgrid_after_load():

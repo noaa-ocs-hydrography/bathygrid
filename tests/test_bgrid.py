@@ -205,7 +205,7 @@ def test_auto_resolution_methods():
     assert res == bg.resolutions == [1.0]
     # now illustrate the more complex density based method
     res = bg.grid(resolution=None, algorithm='mean', auto_resolution_mode='density')
-    assert res == bg.resolutions == [256.0]
+    assert res == bg.resolutions == [512.0]
 
 
 def test_SRGrid_get_layer_by_name():
@@ -408,8 +408,8 @@ def test_only_z_data():
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
-    assert bg.cell_count == {0.5: 10, 1.0: 6}
-    assert bg.coverage_area == 11.0
+    assert bg.cell_count == {0.25: 3, 0.5: 7, 1.0: 6}
+    assert bg.coverage_area == 10.25
 
 
 def test_return_extents():
@@ -434,8 +434,8 @@ def test_cell_count():
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
-    assert bg.cell_count == {0.5: 10, 1.0: 6}
-    assert bg.coverage_area == 11.0
+    assert bg.cell_count == {0.25: 3, 0.5: 7, 1.0: 6}
+    assert bg.coverage_area == 10.25
 
 
 def test_with_dask():
@@ -450,8 +450,8 @@ def test_with_dask():
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(use_dask=True)
     assert bg.client
-    assert bg.cell_count == {0.5: 10, 1.0: 6}
-    assert bg.coverage_area == 11.0
+    assert bg.cell_count == {0.25: 3, 0.5: 7, 1.0: 6}
+    assert bg.coverage_area == 10.25
 
 
 def test_return_unique_containers():
