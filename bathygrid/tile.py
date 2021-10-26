@@ -268,8 +268,8 @@ class SRTile(Tile):
         # if any cells have less than minimum points, this resolution is too low
         if too_fine.any():
             return False, 'LOW'
-        # 95 percent of cells have too coarse a resolution
-        elif np.count_nonzero(too_coarse) / len(uniqs) >= 0.95:
+        # all cells have too coarse a resolution
+        elif too_coarse.all():
             return False, 'HIGH'
         else:
             return True, ''
@@ -302,6 +302,8 @@ class SRTile(Tile):
         valid_rez = False
         checked_rez = []
         current_rez = starting_resolution
+        if self.name == '403808.0_4123584.0':
+            print('here')
         while not valid_rez:
             valid_rez, rez_adjustment = self._assess_resolution(current_rez)
             checked_rez.append(current_rez)
