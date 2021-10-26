@@ -251,8 +251,8 @@ class SRTile(Tile):
             if True, resolution is deemed good
         str
             string qualifier, if LOW resolution is too low, if HIGH resolution is too high, if empty string the resolution is good
-
         """
+
         grid_x = np.arange(self.min_x, self.max_x, resolution)
         grid_y = np.arange(self.min_y, self.max_y, resolution)
         cell_edges_x = np.append(grid_x, grid_x[-1] + resolution)
@@ -317,9 +317,9 @@ class SRTile(Tile):
             elif rez_adjustment == 'LOW':
                 current_rez = rez_options[curr_rez_index + 1]
             # if you are about to check a resolution that has been checked already (i.e. you are going back and forth
-            #   between resolutions) go with this one, prevents the recursive loop
+            #   between resolutions) go with the greater of the two to be conservative
             if current_rez in checked_rez:
-                return current_rez
+                return max(current_rez, checked_rez[-1])
 
     def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
              regrid_option: str = '', progress_bar: bool = False):
