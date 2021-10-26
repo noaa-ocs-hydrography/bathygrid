@@ -11,8 +11,9 @@ maximum_chunk_dimension = 32768.0
 # density based resolution finder will use as fine a resolution as possible, as long as there are at least this many
 # points per cell
 minimum_points_per_cell = 5
-# density based resolution finder will ensure that this percentage of cells passes the resolution finder test
-check_cells_percentage = 0.95
+# when drilling down to the appropriate resolution using the densty estimation routine, we start at this resolution
+# important because a relatively high resolution will allow us to catch holidays and drive the rez up
+starting_resolution_density = 16.0
 
 # BACKEND
 # these are the attributes that are written to disk for grids, see backend

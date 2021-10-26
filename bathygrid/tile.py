@@ -2,7 +2,7 @@ import numpy as np
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
 from bathygrid.algorithms import np_grid_mean, np_grid_shoalest
-from bathygrid.grid_variables import depth_resolution_lookup, minimum_points_per_cell, check_cells_percentage
+from bathygrid.grid_variables import depth_resolution_lookup, minimum_points_per_cell, starting_resolution_density
 
 
 class Tile(TileGrid):
@@ -265,11 +265,11 @@ class SRTile(Tile):
         # mulitply by 4 as the cell is split into 4 more cells if we use a finer resolution
         too_coarse = (counts > minimum_points_per_cell * 4)
 
-        # 95 percent of cells have too fine a resolution
-        if np.count_nonzero(too_fine) / len(uniqs) >= check_cells_percentage:
+        # if any cells have less than minimum points, this resolution is too low
+        if too_fine.any():
             return False, 'LOW'
         # 95 percent of cells have too coarse a resolution
-        elif np.count_nonzero(too_coarse) / len(uniqs) >= check_cells_percentage:
+        elif np.count_nonzero(too_coarse) / len(uniqs) >= 0.95:
             return False, 'HIGH'
         else:
             return True, ''
@@ -294,7 +294,8 @@ class SRTile(Tile):
 
         rez_options = list(depth_resolution_lookup.values())
         if not starting_resolution:
-            starting_resolution = self._calculate_resolution_lookup()
+            # starting_resolution = self._calculate_resolution_lookup()
+            starting_resolution = starting_resolution_density  # start at a coarse resolution to catch holidays
         else:
             if starting_resolution not in rez_options:
                 raise ValueError('Provided resolution {} is not one of the valid resolution options: {}'.format(starting_resolution, rez_options))
