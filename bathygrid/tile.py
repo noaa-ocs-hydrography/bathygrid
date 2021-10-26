@@ -302,8 +302,6 @@ class SRTile(Tile):
         valid_rez = False
         checked_rez = []
         current_rez = starting_resolution
-        if self.name == '403808.0_4123584.0':
-            print('here')
         while not valid_rez:
             valid_rez, rez_adjustment = self._assess_resolution(current_rez)
             checked_rez.append(current_rez)
