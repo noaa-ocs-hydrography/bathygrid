@@ -360,9 +360,12 @@ class SRTile(Tile):
         cell_indices = bin2d_with_indices(self.data['x'], self.data['y'], cell_edges_x, cell_edges_y)
         uniqs, counts = np.unique(cell_indices, return_counts=True)
 
+        # estimate resolution per coarse grid cell based on density of the points in each cell (from Calder paper)
         cell_density = counts / (starting_resolution ** 2)
         resolution_estimate = np.sqrt(2 * minimum_points_per_cell * (1 + noise_accomodation_factor) / cell_density)
-        max_resolution = max(resolution_estimate)
+        # compute weighted average of resolution estimate across all cells to get tile wide resolution estimate
+        max_resolution = np.sum(resolution_estimate * counts) / np.sum(counts)
+        # get the nearest power of two resolution
         nearest_valid_resolution_index = int(np.searchsorted(rez_options, max_resolution))
         if nearest_valid_resolution_index == len(rez_options):  # greater than any rez option, use the coarsest resolution
             nearest_valid_resolution_index -= 1
