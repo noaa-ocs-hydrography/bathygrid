@@ -345,13 +345,14 @@ class SRTile(Tile):
         """
 
         rez_options = sorted(list(depth_resolution_lookup.values()))
+        tile_size = self.max_x - self.min_x
         if not starting_resolution:
             starting_resolution = starting_resolution_density  # start at a coarse resolution to catch holidays
         else:
             if starting_resolution not in rez_options:
                 raise ValueError(
-                    'Provided resolution {} is not one of the valid resolution options: {}'.format(starting_resolution,
-                                                                                                   rez_options))
+                    'Provided resolution {} is not one of the valid resolution options: {}'.format(starting_resolution, rez_options))
+        starting_resolution = min(tile_size, starting_resolution)
 
         grid_x = np.arange(self.min_x, self.max_x, starting_resolution)
         grid_y = np.arange(self.min_y, self.max_y, starting_resolution)
@@ -369,7 +370,6 @@ class SRTile(Tile):
         nearest_valid_resolution_index = int(np.searchsorted(rez_options, max_resolution))
         if nearest_valid_resolution_index == len(rez_options):  # greater than any rez option, use the coarsest resolution
             nearest_valid_resolution_index -= 1
-        tile_size = self.max_x - self.min_x
         # resolution cannot be greater than the tile size of course...
         final_rez = min(rez_options[nearest_valid_resolution_index], tile_size)
         return final_rez
