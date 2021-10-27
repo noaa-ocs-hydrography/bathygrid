@@ -366,7 +366,10 @@ class SRTile(Tile):
         nearest_valid_resolution_index = int(np.searchsorted(rez_options, max_resolution))
         if nearest_valid_resolution_index == len(rez_options):  # greater than any rez option, use the coarsest resolution
             nearest_valid_resolution_index -= 1
-        return rez_options[nearest_valid_resolution_index]
+        tile_size = self.max_x - self.min_x
+        # resolution cannot be greater than the tile size of course...
+        final_rez = min(rez_options[nearest_valid_resolution_index], tile_size)
+        return final_rez
 
     def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
              regrid_option: str = '', progress_bar: bool = False):
