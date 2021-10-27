@@ -1,6 +1,6 @@
 import numpy as np
 from bathygrid.tile import SRTile
-from test_data.test_data import smalldata, smileyface
+from test_data.test_data import smalldata, smileyface, realdata
 
 
 def test_tile_setup():
@@ -194,14 +194,27 @@ def test_get_layers_by_name_params():
 
 
 def test_resolution_by_density():
-    til = SRTile(0.0, 0.0, 1024)
-    til.add_points(smileyface, 'test1')
-    assert til.resolution_by_density() == 1024.0
+    til = SRTile(403744.0, 4122656.0, 32)
+    til.add_points(realdata, 'test1')
+    assert til.resolution_by_density() == 8.0
     # even if you start at a different resolution, you eventually get the same answer
-    assert til.resolution_by_density(starting_resolution=0.5) == 1024.0
+    assert til.resolution_by_density(starting_resolution=0.5) == 8.0
     # provided starter resolution must be one of the valid powers of two
     try:
         til.resolution_by_density(starting_resolution=666)
+        assert False
+    except ValueError:
+        assert True
+
+
+def test_resolution_by_densityv2():
+    til = SRTile(403744.0, 4122656.0, 32)
+    til.add_points(realdata, 'test1')
+    assert til.resolution_by_densityv2() == 16.0
+    assert til.resolution_by_densityv2(starting_resolution=0.5) == 4.0
+    # provided starter resolution must be one of the valid powers of two
+    try:
+        til.resolution_by_densityv2(starting_resolution=666)
         assert False
     except ValueError:
         assert True

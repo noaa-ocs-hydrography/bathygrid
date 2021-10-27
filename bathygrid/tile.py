@@ -296,11 +296,11 @@ class SRTile(Tile):
 
         rez_options = list(depth_resolution_lookup.values())
         if not starting_resolution:
-            # starting_resolution = self._calculate_resolution_lookup()
             starting_resolution = starting_resolution_density  # start at a coarse resolution to catch holidays
         else:
             if starting_resolution not in rez_options:
                 raise ValueError('Provided resolution {} is not one of the valid resolution options: {}'.format(starting_resolution, rez_options))
+
         valid_rez = False
         checked_rez = []
         current_rez = starting_resolution
@@ -322,6 +322,51 @@ class SRTile(Tile):
             #   between resolutions) go with the greater of the two to be conservative
             if current_rez in checked_rez:
                 return max(current_rez, checked_rez[-1])
+
+    def resolution_by_densityv2(self, starting_resolution: float = None, noise_accomodation_factor: float = 0.75):
+        """
+        A density based check adapted from the "Computationally efficient variable resolution depth estimation" paper by
+        Brian Calder/Glen Rice.  Determine the density for a coarse resolution grid on the tile (starting_resolution)
+        and calculate a predicted resolution to fit the cell using the noise_accomodation_factor and
+        minimum_points_per_cell parameters.
+
+        Parameters
+        ----------
+        starting_resolution
+            the first resolution to evaluate, will go up/down from this resolution in the iterative check
+        noise_accomodation_factor
+            increase this to increase the number of soundings allowed per node, is multiplied against the
+            minimum points per cell parameter
+
+        Returns
+        -------
+        float
+            resolution to use based on the density of the points in the tile
+        """
+
+        rez_options = sorted(list(depth_resolution_lookup.values()))
+        if not starting_resolution:
+            starting_resolution = starting_resolution_density  # start at a coarse resolution to catch holidays
+        else:
+            if starting_resolution not in rez_options:
+                raise ValueError(
+                    'Provided resolution {} is not one of the valid resolution options: {}'.format(starting_resolution,
+                                                                                                   rez_options))
+
+        grid_x = np.arange(self.min_x, self.max_x, starting_resolution)
+        grid_y = np.arange(self.min_y, self.max_y, starting_resolution)
+        cell_edges_x = np.append(grid_x, grid_x[-1] + starting_resolution)
+        cell_edges_y = np.append(grid_y, grid_y[-1] + starting_resolution)
+        cell_indices = bin2d_with_indices(self.data['x'], self.data['y'], cell_edges_x, cell_edges_y)
+        uniqs, counts = np.unique(cell_indices, return_counts=True)
+
+        cell_density = counts / (starting_resolution ** 2)
+        resolution_estimate = np.sqrt(2 * minimum_points_per_cell * (1 + noise_accomodation_factor) / cell_density)
+        max_resolution = max(resolution_estimate)
+        nearest_valid_resolution_index = int(np.searchsorted(rez_options, max_resolution))
+        if nearest_valid_resolution_index == len(rez_options):  # greater than any rez option, use the coarsest resolution
+            nearest_valid_resolution_index -= 1
+        return rez_options[nearest_valid_resolution_index]
 
     def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
              regrid_option: str = '', progress_bar: bool = False):
@@ -353,7 +398,7 @@ class SRTile(Tile):
             if auto_resolution_mode == 'depth':
                 resolution = self._calculate_resolution_lookup()
             elif auto_resolution_mode == 'density':
-                resolution = self.resolution_by_density()
+                resolution = self.resolution_by_densityv2()
             else:
                 raise ValueError('Tile given no resolution and an option of {} which is not supported'.format(auto_resolution_mode))
         if not is_power_of_two(resolution):

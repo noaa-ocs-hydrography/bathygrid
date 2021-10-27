@@ -261,7 +261,7 @@ class BathyGrid(BaseGrid):
         for row in self.tiles:
             for tile in row:
                 if tile:
-                    tile_rez = tile.resolution_by_density(starting_resolution)
+                    tile_rez = tile.resolution_by_densityv2(starting_resolution)
                     rez_options.append(tile_rez)
         if rez_options:
             return max(rez_options)
