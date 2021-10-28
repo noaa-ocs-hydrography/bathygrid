@@ -355,8 +355,11 @@ class NumpyGrid(BaseStorage):
             for resolution in tile.cells.keys():
                 remove_with_permissionserror(folderpath + '/cells_{}_depth'.format(resolution))
                 da.to_npy_stack(folderpath + '/cells_{}_depth'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['depth']))
-                remove_with_permissionserror(folderpath + '/cells_{}_density'.format(resolution))
-                da.to_npy_stack(folderpath + '/cells_{}_density'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['density']))
+                try:  # added in bathygrid 1.1.0
+                    remove_with_permissionserror(folderpath + '/cells_{}_density'.format(resolution))
+                    da.to_npy_stack(folderpath + '/cells_{}_density'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['density']))
+                except:
+                    pass
                 if 'vertical_uncertainty' in tile.cells[resolution]:
                     remove_with_permissionserror(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                     da.to_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['vertical_uncertainty']))
@@ -392,7 +395,10 @@ class NumpyGrid(BaseStorage):
             for resolution in resolutions:
                 tile.cells[resolution] = {}
                 tile.cells[resolution]['depth'] = da.from_npy_stack(folderpath + '/cells_{}_depth'.format(resolution))
-                tile.cells[resolution]['density'] = da.from_npy_stack(folderpath + '/cells_{}_density'.format(resolution))
+                try:  # added in bathygrid 1.1.0
+                    tile.cells[resolution]['density'] = da.from_npy_stack(folderpath + '/cells_{}_density'.format(resolution))
+                except:
+                    pass
                 if os.path.exists(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution)):
                     tile.cells[resolution]['vertical_uncertainty'] = da.from_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
