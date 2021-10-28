@@ -600,6 +600,43 @@ class BathyGrid(BaseGrid):
                         data[lyr] = newdata
                 yield geo, data_col, data_row, tile_cell_count, data
 
+    def get_tile_boundaries(self):
+        """
+        Return the grid coordinates in such a way that if you were to draw them, you would get a grid.  Start with the
+        tile edges and add some more coordinates to draw a box around each tile.  Finish off with a last column that
+        gets you back to the row origin for the next row, so that you don't get a draw diagonal line from the end of
+        the row to the start of the next row.
+
+        Returns
+        -------
+        np.array
+            1d array of x coordinates for the drawn grid in meters
+        np.array
+            1d array of y coordinates for the drawn grid in meters
+        """
+
+        cellboundaries_x, cellboundaries_y = np.meshgrid(self.tile_edges_x, self.tile_edges_y)
+        total_x = np.zeros((cellboundaries_x.shape[0], cellboundaries_x.shape[1] * 5), dtype=np.float32)
+        total_y = np.zeros((cellboundaries_x.shape[0], cellboundaries_x.shape[1] * 5), dtype=np.float32)
+        total_x[:, ::5] = cellboundaries_x
+        total_y[:, ::5] = cellboundaries_y
+        total_x[:, 1::5] = cellboundaries_x + self.tile_size
+        total_y[:, 1::5] = cellboundaries_y
+        total_x[:, 2::5] = cellboundaries_x + self.tile_size
+        total_y[:, 2::5] = cellboundaries_y + self.tile_size
+        total_x[:, 3::5] = cellboundaries_x
+        total_y[:, 3::5] = cellboundaries_y + self.tile_size
+        total_x[:, 4::5] = cellboundaries_x
+        total_y[:, 4::5] = cellboundaries_y
+
+        # now add one last column to get back to the origin of the next row so you dont get a big diagonal line across your grid
+        total_x = np.hstack((total_x, total_x[:, -1].reshape(total_x.shape[0], 1)))
+        total_y = np.hstack((total_y, total_y[:, -1].reshape(total_y.shape[0], 1) + self.tile_size))
+        # adjust corner point to the end of the grid
+        total_y[-1, -1] = self.max_y
+
+        return total_x.ravel(), total_y.ravel()
+
     def _finalize_chunk(self, column_indices: list, row_indices: list, cells_per_tile: int, layers: list, layerdata: list,
                         nodatavalue: float, for_gdal: bool = True):
         """
