@@ -11,7 +11,7 @@ def _expected_sr_data(bathygrid):
     assert os.path.exists(rootpath)
     numtiles = np.count_nonzero(bathygrid.tiles)
     fldrs = [fldr for fldr in os.listdir(rootpath) if os.path.isdir(os.path.join(rootpath, fldr))]
-    assert len(fldrs) == numtiles
+    assert len(fldrs) == numtiles + 5  # five for the five extra array folders, tile edges, origin, etc.
     assert os.path.exists(os.path.join(rootpath, 'metadata.json'))
 
     grid_tile = bathygrid.tiles[0][0]  # pull out random populated tile
@@ -69,7 +69,7 @@ def _expected_vrgrid_data(bathygrid):
     assert os.path.exists(rootpath)
     numgrids = bathygrid.tiles.size
     fldrs = [fldr for fldr in os.listdir(rootpath) if os.path.isdir(os.path.join(rootpath, fldr))]
-    assert len(fldrs) == numgrids
+    assert len(fldrs) == numgrids + 5  # five for the five extra array folders, tile edges, origin, etc.
     assert os.path.exists(os.path.join(rootpath, 'metadata.json'))
 
     assert bathygrid.name == 'VRGridTile_Root'
@@ -90,7 +90,7 @@ def _expected_vrgrid_data(bathygrid):
     assert os.path.exists(subgrid_rootpath)
     populated_tiles = [x for x in subgrid.tiles.ravel() if x is not None]
     fldrs = [fldr for fldr in os.listdir(subgrid_rootpath) if os.path.isdir(os.path.join(subgrid_rootpath, fldr))]
-    assert len(fldrs) == len(populated_tiles)
+    assert len(fldrs) == len(populated_tiles) + 5  # five for the five extra array folders, tile edges, origin, etc.
     assert os.path.exists(os.path.join(subgrid_rootpath, 'metadata.json'))
 
     assert subgrid.name == '0.0_0.0'
@@ -181,7 +181,7 @@ def test_srgrid_remove_points():
     rootpath = os.path.join(bg.output_folder, bg.name)
     assert os.path.exists(rootpath)
     fldrs = [fldr for fldr in os.listdir(rootpath) if os.path.isdir(os.path.join(rootpath, fldr))]
-    assert len(fldrs) == 0
+    assert len(fldrs) == 5
 
 
 def test_vrgrid_remove_points():
@@ -192,7 +192,7 @@ def test_vrgrid_remove_points():
     rootpath = os.path.join(bg.output_folder, bg.name)
     assert os.path.exists(rootpath)
     fldrs = [fldr for fldr in os.listdir(rootpath) if os.path.isdir(os.path.join(rootpath, fldr))]
-    assert len(fldrs) == 4
+    assert len(fldrs) == 9
 
 
 def test_srgrid_grid_update():

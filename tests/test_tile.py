@@ -210,9 +210,10 @@ def test_resolution_by_density():
 def test_resolution_by_densityv2():
     til = SRTile(403744.0, 4122656.0, 32)
     til.add_points(realdata, 'test1')
+    # with a coarse resolution we see the result of the density based estimate
     assert til.resolution_by_densityv2() == 16.0
-    assert til.resolution_by_densityv2(starting_resolution=0.5) == 4.0
-    # provided starter resolution must be one of the valid powers of two
+    # with too fine a resolution, we see it default back to the old lookup resolution by density method
+    assert til.resolution_by_densityv2(starting_resolution=0.5) == 0.5
     try:
         til.resolution_by_densityv2(starting_resolution=666)
         assert False

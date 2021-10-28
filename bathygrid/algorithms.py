@@ -129,8 +129,8 @@ def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
     return grid, tvu_grid, thu_grid
 
 
-def _calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.array, grid_x: np.array, grid_y: np.array,
-                      visualize: bool = False):
+def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.array, grid_x: np.array, grid_y: np.array,
+                     visualize: bool = False):
     """
     Perform least squares regression to get plane equation of best fit plane for each grid cell.  grid cells are defined
     by the provided (grid_x, grid_y) edge values.

@@ -34,9 +34,9 @@ class BaseStorage(BathyGrid):
             raise EnvironmentError('Unable to save json file to {}, does not exist'.format(folderpath))
         fileout = os.path.join(folderpath, 'metadata.json')
         data = {ky: self.__getattribute__(ky) for ky in bathygrid_desired_keys}
-        for ky in bathygrid_numpy_to_list:
-            if isinstance(data[ky], np.ndarray):
-                data[ky] = data[ky].tolist()
+        for ky in bathygrid_numpy_to_list:  # this data is too large to store as text, save as array instead
+            self._save_array(folderpath + '/{}'.format(ky), data[ky])
+            data.pop(ky)
         for ky in bathygrid_float_to_str:
             data[ky] = str(data[ky])
         with open(fileout, 'w') as fout:
@@ -60,7 +60,10 @@ class BaseStorage(BathyGrid):
         if 'output_folder' in data:
             data.pop('output_folder')
         for ky in bathygrid_numpy_to_list:
-            data[ky] = np.array(data[ky])
+            try:  # the old way prior to 1.1.2 was to store these in json, but they are too large really
+                data[ky] = np.array(data[ky])
+            except KeyError:
+                data[ky] = self._load_array(folderpath + '/{}'.format(ky)).compute()
         for ky in bathygrid_float_to_str:
             data[ky] = float(data[ky])
         for ky in data:
@@ -108,6 +111,12 @@ class BaseStorage(BathyGrid):
             data[ky] = float(data[ky])
         for ky in data:
             tile.__setattr__(ky, data[ky])
+
+    def _save_array(self, arr_path: str, arr: np.ndarray):
+        raise NotImplementedError('_save_array must be implemented in inheriting class')
+
+    def _load_array(self, arr_path: str):
+        raise NotImplementedError('_load_array must be implemented in inheriting class')
 
     def _save_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         raise NotImplementedError('_save_tile_data must be implemented in inheriting class')
@@ -340,8 +349,18 @@ class NumpyGrid(BaseStorage):
 
     def _numpygrid_todask(self, arr):
         if not isinstance(arr, da.Array):
-            return da.from_array(arr)
+            if arr is not None:
+                return da.from_array(arr)
+            else:
+                return da.from_array(np.array([]))
         return arr
+
+    def _save_array(self, arr_path: str, arr: np.ndarray):
+        remove_with_permissionserror(arr_path)
+        da.to_npy_stack(arr_path, self._numpygrid_todask(arr))
+
+    def _load_array(self, arr_path: str):
+        return da.from_npy_stack(arr_path)
 
     def _save_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         """
@@ -349,31 +368,23 @@ class NumpyGrid(BaseStorage):
         """
 
         if not only_grid:
-            remove_with_permissionserror(folderpath + '/data')
-            da.to_npy_stack(folderpath + '/data', self._numpygrid_todask(tile.data))
+            self._save_array(folderpath + '/data', tile.data)
         if not only_points:
             for resolution in tile.cells.keys():
-                remove_with_permissionserror(folderpath + '/cells_{}_depth'.format(resolution))
-                da.to_npy_stack(folderpath + '/cells_{}_depth'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['depth']))
+                self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
                 try:  # added in bathygrid 1.1.0
-                    remove_with_permissionserror(folderpath + '/cells_{}_density'.format(resolution))
-                    da.to_npy_stack(folderpath + '/cells_{}_density'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['density']))
+                    self._save_array(folderpath + '/cells_{}_density'.format(resolution), tile.cells[resolution]['density'])
                 except:
                     pass
                 if 'vertical_uncertainty' in tile.cells[resolution]:
-                    remove_with_permissionserror(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
-                    da.to_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['vertical_uncertainty']))
+                    self._save_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), tile.cells[resolution]['vertical_uncertainty'])
                 if 'horizontal_uncertainty' in tile.cells[resolution]:
-                    remove_with_permissionserror(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
-                    da.to_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), self._numpygrid_todask(tile.cells[resolution]['horizontal_uncertainty']))
-                remove_with_permissionserror(folderpath + '/cell_edges_x_{}'.format(resolution))
-                da.to_npy_stack(folderpath + '/cell_edges_x_{}'.format(resolution), self._numpygrid_todask(tile.cell_edges_x[resolution]))
-                remove_with_permissionserror(folderpath + '/cell_edges_y_{}'.format(resolution))
-                da.to_npy_stack(folderpath + '/cell_edges_y_{}'.format(resolution), self._numpygrid_todask(tile.cell_edges_y[resolution]))
+                    self._save_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), tile.cells[resolution]['horizontal_uncertainty'])
+                self._save_array(folderpath + '/cell_edges_x_{}'.format(resolution), tile.cell_edges_x[resolution])
+                self._save_array(folderpath + '/cell_edges_y_{}'.format(resolution), tile.cell_edges_y[resolution])
         # both require saving the indices, which are updated on adding/removing points and when gridding
         for resolution in tile.cell_indices.keys():
-            remove_with_permissionserror(folderpath + '/cell_{}_indices'.format(resolution))
-            da.to_npy_stack(folderpath + '/cell_{}_indices'.format(resolution), self._numpygrid_todask(tile.cell_indices[resolution]))
+            self._save_array(folderpath + '/cell_{}_indices'.format(resolution), tile.cell_indices[resolution])
 
     def _load_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         """
@@ -390,23 +401,23 @@ class NumpyGrid(BaseStorage):
                     resolutions.append(res)
         resolutions.sort()
         if not only_grid:
-            tile.data = da.from_npy_stack(folderpath + '/data')
+            tile.data = self._load_array(folderpath + '/data')
         if not only_points:
             for resolution in resolutions:
                 tile.cells[resolution] = {}
-                tile.cells[resolution]['depth'] = da.from_npy_stack(folderpath + '/cells_{}_depth'.format(resolution))
+                tile.cells[resolution]['depth'] = self._load_array(folderpath + '/cells_{}_depth'.format(resolution))
                 try:  # added in bathygrid 1.1.0
-                    tile.cells[resolution]['density'] = da.from_npy_stack(folderpath + '/cells_{}_density'.format(resolution))
+                    tile.cells[resolution]['density'] = self._load_array(folderpath + '/cells_{}_density'.format(resolution))
                 except:
                     pass
                 if os.path.exists(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution)):
-                    tile.cells[resolution]['vertical_uncertainty'] = da.from_npy_stack(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
+                    tile.cells[resolution]['vertical_uncertainty'] = self._load_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
-                    tile.cells[resolution]['horizontal_uncertainty'] = da.from_npy_stack(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
-                tile.cell_edges_x[resolution] = da.from_npy_stack(folderpath + '/cell_edges_x_{}'.format(resolution))
-                tile.cell_edges_y[resolution] = da.from_npy_stack(folderpath + '/cell_edges_y_{}'.format(resolution))
+                    tile.cells[resolution]['horizontal_uncertainty'] = self._load_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
+                tile.cell_edges_x[resolution] = self._load_array(folderpath + '/cell_edges_x_{}'.format(resolution))
+                tile.cell_edges_y[resolution] = self._load_array(folderpath + '/cell_edges_y_{}'.format(resolution))
         for resolution in resolutions:
-            tile.cell_indices[resolution] = da.from_npy_stack(folderpath + '/cell_{}_indices'.format(resolution))
+            tile.cell_indices[resolution] = self._load_array(folderpath + '/cell_{}_indices'.format(resolution))
 
     def _load_tile_data_to_memory(self, tile: Tile, only_points: bool = False, only_grid: bool = False):
         """

@@ -205,7 +205,7 @@ def test_auto_resolution_methods():
     assert res == bg.resolutions == [1.0]
     # now illustrate the more complex density based method
     res = bg.grid(resolution=None, algorithm='mean', auto_resolution_mode='density')
-    assert res == bg.resolutions == [128.0]
+    assert res == bg.resolutions == [1.0]
 
 
 def test_SRGrid_get_layer_by_name():

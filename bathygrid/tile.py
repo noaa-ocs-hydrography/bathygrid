@@ -2,7 +2,8 @@ import numpy as np
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
 from bathygrid.algorithms import np_grid_mean, np_grid_shoalest
-from bathygrid.grid_variables import depth_resolution_lookup, minimum_points_per_cell, starting_resolution_density
+from bathygrid.grid_variables import depth_resolution_lookup, minimum_points_per_cell, starting_resolution_density, \
+    noise_accomodation_factor, revert_to_lookup_threshold
 
 
 class Tile(TileGrid):
@@ -234,6 +235,15 @@ class SRTile(Tile):
         if horiz_val.size > 0:
             self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
+    def _return_cell_counts(self, resolution: float):
+        grid_x = np.arange(self.min_x, self.max_x, resolution)
+        grid_y = np.arange(self.min_y, self.max_y, resolution)
+        cell_edges_x = np.append(grid_x, grid_x[-1] + resolution)
+        cell_edges_y = np.append(grid_y, grid_y[-1] + resolution)
+        cell_indices = bin2d_with_indices(self.data['x'], self.data['y'], cell_edges_x, cell_edges_y)
+        uniqs, counts = np.unique(cell_indices, return_counts=True)
+        return uniqs, counts
+
     def _assess_resolution(self, resolution: float = None):
         """
         Using the points in this tile, assess the given resolution to determine if it is too coarse or too fine.  We use
@@ -253,12 +263,7 @@ class SRTile(Tile):
             string qualifier, if LOW resolution is too low, if HIGH resolution is too high, if empty string the resolution is good
         """
 
-        grid_x = np.arange(self.min_x, self.max_x, resolution)
-        grid_y = np.arange(self.min_y, self.max_y, resolution)
-        cell_edges_x = np.append(grid_x, grid_x[-1] + resolution)
-        cell_edges_y = np.append(grid_y, grid_y[-1] + resolution)
-        cell_indices = bin2d_with_indices(self.data['x'], self.data['y'], cell_edges_x, cell_edges_y)
-        uniqs, counts = np.unique(cell_indices, return_counts=True)
+        uniqs, counts = self._return_cell_counts(resolution)
         # if there are less than minimum_points_per_cell in any cell, the resolution is too fine
         too_fine = (counts < minimum_points_per_cell)
         # if there are greater than minimum_points_per_cell * 4 in all cells, the resolution is too coarse
@@ -278,6 +283,7 @@ class SRTile(Tile):
 
     def resolution_by_density(self, starting_resolution: float = None):
         """
+        DEPRECATED: See resolution_by_densityv2
         A recursive check with the points in this tile to identify the best resolution based on density.  We start with
         the depth resolution lookup resolution, binning the points and determining if grid_variables.check_cells_percentage
         of the cells have the appropriate number of points per cell, see grid_variables.minimum_points_per_cell.  We then
@@ -323,7 +329,7 @@ class SRTile(Tile):
             if current_rez in checked_rez:
                 return max(current_rez, checked_rez[-1])
 
-    def resolution_by_densityv2(self, starting_resolution: float = None, noise_accomodation_factor: float = 0.75):
+    def resolution_by_densityv2(self, starting_resolution: float = None, noise_factor: float = None):
         """
         A density based check adapted from the "Computationally efficient variable resolution depth estimation" paper by
         Brian Calder/Glen Rice.  Determine the density for a coarse resolution grid on the tile (starting_resolution)
@@ -334,7 +340,7 @@ class SRTile(Tile):
         ----------
         starting_resolution
             the first resolution to evaluate, will go up/down from this resolution in the iterative check
-        noise_accomodation_factor
+        noise_factor
             increase this to increase the number of soundings allowed per node, is multiplied against the
             minimum points per cell parameter
 
@@ -350,28 +356,35 @@ class SRTile(Tile):
             starting_resolution = starting_resolution_density  # start at a coarse resolution to catch holidays
         else:
             if starting_resolution not in rez_options:
-                raise ValueError(
-                    'Provided resolution {} is not one of the valid resolution options: {}'.format(starting_resolution, rez_options))
+                raise ValueError('Provided resolution {} is not one of the valid resolution options: {}'.format(starting_resolution, rez_options))
+        if not noise_factor:
+            noise_factor = noise_accomodation_factor
         starting_resolution = min(tile_size, starting_resolution)
-
-        grid_x = np.arange(self.min_x, self.max_x, starting_resolution)
-        grid_y = np.arange(self.min_y, self.max_y, starting_resolution)
-        cell_edges_x = np.append(grid_x, grid_x[-1] + starting_resolution)
-        cell_edges_y = np.append(grid_y, grid_y[-1] + starting_resolution)
-        cell_indices = bin2d_with_indices(self.data['x'], self.data['y'], cell_edges_x, cell_edges_y)
-        uniqs, counts = np.unique(cell_indices, return_counts=True)
-
-        # estimate resolution per coarse grid cell based on density of the points in each cell (from Calder paper)
-        cell_density = counts / (starting_resolution ** 2)
-        resolution_estimate = np.sqrt(2 * minimum_points_per_cell * (1 + noise_accomodation_factor) / cell_density)
-        # compute weighted average of resolution estimate across all cells to get tile wide resolution estimate
-        max_resolution = np.sum(resolution_estimate * counts) / np.sum(counts)
-        # get the nearest power of two resolution
-        nearest_valid_resolution_index = int(np.searchsorted(rez_options, max_resolution))
-        if nearest_valid_resolution_index == len(rez_options):  # greater than any rez option, use the coarsest resolution
-            nearest_valid_resolution_index -= 1
+        max_starting_cells = int((tile_size / starting_resolution) ** 2)
+        uniqs, counts = self._return_cell_counts(starting_resolution)
+        percent_full = len(uniqs) / max_starting_cells
+        # try and deal with edge cases, where the tile is not filled in, like along the edge of the survey
+        # can't rely on density, that will drive the resolution up, as the tile is nearly empty
+        # instead fall back on the old depth lookup method
+        if percent_full <= revert_to_lookup_threshold:
+            rez_depths = list(depth_resolution_lookup.keys())
+            nearest_valid_resolution_index = int(np.searchsorted(rez_depths, self.mean_depth))
+            if nearest_valid_resolution_index == len(rez_options):  # greater than any rez option, use the coarsest resolution
+                nearest_valid_resolution_index -= 1
+            final_rez = depth_resolution_lookup[rez_depths[nearest_valid_resolution_index]]
+        else:
+            # estimate resolution per coarse grid cell based on density of the points in each cell (from Calder paper)
+            cell_density = counts / (starting_resolution ** 2)
+            resolution_estimate = np.sqrt(2 * minimum_points_per_cell * (1 + noise_factor) / cell_density)
+            # compute weighted average of resolution estimate across all cells to get tile wide resolution estimate
+            max_resolution = np.sum(resolution_estimate * counts) / np.sum(counts)
+            # get the nearest power of two resolution
+            nearest_valid_resolution_index = int(np.searchsorted(rez_options, max_resolution))
+            if nearest_valid_resolution_index == len(rez_options):  # greater than any rez option, use the coarsest resolution
+                nearest_valid_resolution_index -= 1
+            final_rez = rez_options[nearest_valid_resolution_index]
         # resolution cannot be greater than the tile size of course...
-        final_rez = min(rez_options[nearest_valid_resolution_index], tile_size)
+        final_rez = min(final_rez, tile_size)
         return final_rez
 
     def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
