@@ -1,6 +1,6 @@
 from bathygrid.algorithms import *
-from bathygrid.utilities import is_power_of_two
-from test_data.test_data import get_grid_data
+from bathygrid.utilities import is_power_of_two, bin2d_with_indices
+from test_data.test_data import get_grid_data, realdata
 
 
 def test_grid_mean():
@@ -117,3 +117,13 @@ def test_is_power_of_two():
     assert not is_power_of_two(2.01 ** -5)
     assert not is_power_of_two(1.99 ** -8)
     assert not is_power_of_two(1.99 ** -10)
+
+
+def test_grid_slopes():
+    x, y, z, tvu, thu = realdata['x'], realdata['y'], realdata['z'], realdata['tvu'], realdata['thu']
+    cell_edges_x = np.arange(403734, 403790, 8)
+    cell_edges_y = np.arange(4122656, 4122704, 8)
+    cell_indices = bin2d_with_indices(x, y, cell_edges_x, cell_edges_y)
+    calculate_slopes(x, y, z, cell_indices, cell_edges_x, cell_edges_y, visualize=True)
+
+    urow, ucol = np.unravel_index(cell_indices, (cell_edges_x.shape[0], cell_edges_y.shape[0]))

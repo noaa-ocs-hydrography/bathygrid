@@ -162,19 +162,22 @@ def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.arr
         (m,n) grid of slopes in the x direction for each cell/plane, m = len(grid_x) - 1, n = len(grid_y) - 1
     """
 
-    x_slope_grid = np.zeros((grid_x.shape[0] - 1, grid_y.shape[0] - 1), dtype=np.float32)
-    y_slope_grid = np.zeros((grid_x.shape[0] - 1, grid_y.shape[0] - 1), dtype=np.float32)
+    x_slope_grid = np.zeros((grid_x.shape[0], grid_y.shape[0]), dtype=np.float32)
+    y_slope_grid = np.zeros((grid_x.shape[0], grid_y.shape[0]), dtype=np.float32)
+    resolution = grid_x[1] - grid_x[0]
 
     if visualize:
         plt.figure()
         ax = plt.subplot(111, projection='3d')
         ax.scatter(x, y, z, color='b')
         lstsq_grid = np.full((grid_x.shape[0], grid_y.shape[0]), np.float32(np.nan), dtype=np.float32)
-        lstsq_x, lstsq_y = np.meshgrid(grid_x, grid_y)
+        lstsq_x, lstsq_y = np.meshgrid(grid_x + (resolution / 2), grid_y + (resolution / 2))
+        # lstsq_x = lstsq_x.T
+        # lstsq_y = lstsq_y.T
 
     cell_sort = np.argsort(cell_indices)
     unique_indices, uidx, ucounts = np.unique(cell_indices[cell_sort], return_index=True, return_counts=True)
-    urow, ucol = np.unravel_index(unique_indices, x_slope_grid.shape)
+    urow, ucol = np.unravel_index(unique_indices, (grid_x.shape[0], grid_y.shape[0]))
 
     z_split = np.split(z[cell_sort], uidx)[1:]
     x_split = np.split(x[cell_sort], uidx)[1:]
@@ -186,15 +189,15 @@ def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.arr
         b_data = np.column_stack([z_cell])
         fit, residual, rnk, s = np.linalg.lstsq(a_data, b_data, rcond=None)
 
-        minz = fit[0] * grid_x[row] + fit[1] * grid_y[row] + fit[2]
-        maxz_xdirect = fit[0] * grid_x[row + 1] + fit[1] * grid_y[row] + fit[2]
-        maxz_ydirect = fit[0] * grid_x[row] + fit[1] * grid_y[row + 1] + fit[2]
-        x_slope_grid[row, col] = (maxz_xdirect - minz) / (grid_x[row + 1] - grid_x[row])
-        y_slope_grid[row, col] = (maxz_ydirect - minz) / (grid_y[row + 1] - grid_y[row])
+        minz = fit[0] * grid_x[col] + fit[1] * grid_y[row] + fit[2]
+        maxz_xdirect = fit[0] * (grid_x[col] + resolution) + fit[1] * grid_y[row] + fit[2]
+        maxz_ydirect = fit[0] * grid_x[col] + fit[1] * (grid_y[row] + resolution) + fit[2]
+        x_slope_grid[row, col] = (maxz_xdirect - minz) / resolution
+        y_slope_grid[row, col] = (maxz_ydirect - minz) / resolution
         if visualize:
             lstsq_grid[row, col] = fit[0] * lstsq_x[row, col] + fit[1] * lstsq_y[row, col] + fit[2]
     if visualize:
-        ax.plot_wireframe(lstsq_x, lstsq_y, lstsq_grid, color='k')
+        ax.plot_wireframe(lstsq_x, lstsq_y, lstsq_grid.T, color='k')
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlabel('z')
