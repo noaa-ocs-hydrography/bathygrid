@@ -158,6 +158,14 @@ class SRGrid(NumpyGrid):
         if self.output_folder:
             os.makedirs(output_folder, exist_ok=True)
 
+    def __repr__(self):
+        base_output = super().__repr__()
+        output = 'Time of Data (UTC): {} to {}\n'.format(self.min_time, self.max_time)
+        output += 'EPSG: {}\n'.format(self.epsg)
+        output += 'Path: {}\n'.format(self.output_folder)
+        output += base_output
+        return output
+
     def _convert_dataset(self):
         """
         We currently convert xarray Dataset input into a numpy structured array.  Xarry Datasets appear to be rather

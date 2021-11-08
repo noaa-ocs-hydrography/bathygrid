@@ -52,6 +52,25 @@ class BathyGrid(BaseGrid):
         self.client = None
         self.version = bathyvers
 
+    def __repr__(self):
+        output = 'Bathygrid Version: {}\n'.format(self.version)
+        output += 'Resolutions (meters): {}\n'.format(self.resolutions)
+        output += 'Containers: {}\n'.format('\n'.join(list(self.container.keys())))
+        output += 'Mean Depth: {}\n'.format(self.mean_depth)
+        try:
+            output += 'Minimum Northing: {} '.format(self.min_y)
+            output += 'Maximum Northing: {}\n'.format(self.max_y)
+        except:
+            output += 'Minimum Northing: Unknown '
+            output += 'Maximum Northing: Unknown\n'
+        try:
+            output += 'Minimum Easting: {} '.format(self.min_x)
+            output += 'Maximum Easting: {}\n'.format(self.max_x)
+        except:
+            output += 'Minimum Easting: Unknown '
+            output += 'Maximum Easting: Unknown\n'
+        return output
+
     @property
     def no_grid(self):
         """
