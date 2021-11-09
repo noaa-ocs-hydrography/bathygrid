@@ -207,7 +207,7 @@ class SRTile(Tile):
             depth_val = self.data['z'].compute()
         else:
             depth_val = self.data['z']
-        if not isinstance(self.data, np.ndarray):
+        if not isinstance(self.cell_indices[resolution], np.ndarray):
             cindx = self.cell_indices[resolution].compute()
         else:
             cindx = self.cell_indices[resolution]
@@ -244,7 +244,7 @@ class SRTile(Tile):
             depth_val = self.data['z'].compute()
         else:
             depth_val = self.data['z']
-        if not isinstance(self.data, np.ndarray):
+        if not isinstance(self.cell_indices[resolution], np.ndarray):
             cindx = self.cell_indices[resolution].compute()
         else:
             cindx = self.cell_indices[resolution]
@@ -265,7 +265,7 @@ class SRTile(Tile):
             x_val = self.data['x']
             y_val = self.data['y']
             depth_val = self.data['z']
-        if not isinstance(self.data, np.ndarray):
+        if not isinstance(self.cell_indices[resolution], np.ndarray):
             cindx = self.cell_indices[resolution].compute()
         else:
             cindx = self.cell_indices[resolution]
