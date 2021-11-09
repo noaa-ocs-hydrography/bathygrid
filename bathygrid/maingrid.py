@@ -29,14 +29,17 @@ def _correct_for_layer_metadata(resfile: str, data: list, nodatavalue: float):
     """
 
     if os.path.exists(resfile):
-        r5 = h5py.File(resfile, 'r+')
-        validdata = data[0] != nodatavalue
-        r5['BAG_root']['elevation'].attrs['Maximum Elevation Value'] = np.float32(np.max(data[0][validdata]))
-        r5['BAG_root']['elevation'].attrs['Minimum Elevation Value'] = np.float32(np.min(data[0][validdata]))
-        if len(data) == 2:
-            r5['BAG_root']['uncertainty'].attrs['Maximum Uncertainty Value'] = np.float32(np.max(data[1][validdata]))
-            r5['BAG_root']['uncertainty'].attrs['Minimum Uncertainty Value'] = np.float32(np.min(data[1][validdata]))
-        r5.close()
+        try:
+            r5 = h5py.File(resfile, 'r+')
+            validdata = data[0] != nodatavalue
+            r5['BAG_root']['elevation'].attrs['Maximum Elevation Value'] = np.float32(np.max(data[0][validdata]))
+            r5['BAG_root']['elevation'].attrs['Minimum Elevation Value'] = np.float32(np.min(data[0][validdata]))
+            if len(data) == 2:
+                r5['BAG_root']['uncertainty'].attrs['Maximum Uncertainty Value'] = np.float32(np.max(data[1][validdata]))
+                r5['BAG_root']['uncertainty'].attrs['Minimum Uncertainty Value'] = np.float32(np.min(data[1][validdata]))
+            r5.close()
+        except:
+            print('Warning: Unable to adjust minmax for elevation and uncertainty layers, unknown h5py error')
 
 
 def _set_temporal_extents(resfile: str, start_time: Union[str, int, float, datetime], end_time: Union[str, int, float, datetime]):
@@ -65,56 +68,59 @@ def _set_temporal_extents(resfile: str, start_time: Union[str, int, float, datet
     """
 
     if os.path.exists(resfile) and start_time and end_time:
-        r5 = h5py.File(resfile, 'r+')
-        metadata = r5['BAG_root']['metadata'][:].tobytes().decode().replace("\x00", "")
-        xml_root = et.fromstring(metadata)
+        try:
+            r5 = h5py.File(resfile, 'r+')
+            metadata = r5['BAG_root']['metadata'][:].tobytes().decode().replace("\x00", "")
+            xml_root = et.fromstring(metadata)
 
-        if isinstance(start_time, (float, int)):
-            start_time = datetime.utcfromtimestamp(start_time).strftime('%Y-%m-%dT%H:%M:%S')
-        elif isinstance(start_time, datetime):
-            start_time = start_time.strftime('%Y-%m-%dT%H:%M:%S')
-        if isinstance(end_time, (float, int)):
-            end_time = datetime.utcfromtimestamp(end_time).strftime('%Y-%m-%dT%H:%M:%S')
-        elif isinstance(end_time, datetime):
-            end_time = end_time.strftime('%Y-%m-%dT%H:%M:%S')
-        gmd = '{http://www.isotc211.org/2005/gmd}'
-        gml = '{http://www.opengis.net/gml/3.2}'
-        bagschema = "{http://www.opennavsurf.org/schema/bag}"
-        xsi = '{http://www.w3.org/2001/XMLSchema-instance}'
-        et.register_namespace("gmi", "http://www.isotc211.org/2005/gmi")
-        et.register_namespace('gmd', "http://www.isotc211.org/2005/gmd")
-        et.register_namespace('xsi', "http://www.w3.org/2001/XMLSchema-instance")
-        et.register_namespace('gml', "http://www.opengis.net/gml/3.2")
-        et.register_namespace('gco', "http://www.isotc211.org/2005/gco")
-        et.register_namespace('xlink', "http://www.w3.org/1999/xlink")
-        et.register_namespace('bag', "http://www.opennavsurf.org/schema/bag")
-        temporal_hierarchy = [gmd + 'identificationInfo', bagschema + 'BAG_DataIdentification', gmd + 'extent', gmd + 'EX_Extent',
-                              gmd + 'temporalElement', gmd + 'EX_TemporalExtent', gmd + 'extent', gml + 'TimePeriod']
-        use_gml = gml
-        temporal_root = "/".join(temporal_hierarchy)
-        begin_elem = xml_root.findall(temporal_root + "/" + use_gml + 'beginPosition')
-        end_elem = xml_root.findall(temporal_root + "/" + use_gml + 'endPosition')
-        if not begin_elem or not end_elem:
-            parent = xml_root
-            for elem in temporal_hierarchy:
-                found = parent.findall(elem)
-                if not found:
-                    new_elem = et.SubElement(parent, elem)
-                    if "TimePeriod" in elem:
-                        new_elem.set(use_gml + 'id', "temporal-extent-1")
-                        new_elem.set(xsi + 'type', "gml:TimePeriodType")
-                    found = [new_elem]
-                parent = found[0]
-            if not begin_elem:
-                begin_elem = [et.SubElement(parent, use_gml+"beginPosition")]
-            if not end_elem:
-                end_elem = [et.SubElement(parent, use_gml+"endPosition")]
-        begin_elem[0].text = start_time
-        end_elem[0].text = end_time
-        new_metadata = et.tostring(xml_root).decode()
-        del r5['BAG_root']['metadata']
-        r5['BAG_root'].create_dataset("metadata", maxshape=(None,), data=np.array(list(new_metadata), dtype="S1"))
-        r5.close()
+            if isinstance(start_time, (float, int)):
+                start_time = datetime.utcfromtimestamp(start_time).strftime('%Y-%m-%dT%H:%M:%S')
+            elif isinstance(start_time, datetime):
+                start_time = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+            if isinstance(end_time, (float, int)):
+                end_time = datetime.utcfromtimestamp(end_time).strftime('%Y-%m-%dT%H:%M:%S')
+            elif isinstance(end_time, datetime):
+                end_time = end_time.strftime('%Y-%m-%dT%H:%M:%S')
+            gmd = '{http://www.isotc211.org/2005/gmd}'
+            gml = '{http://www.opengis.net/gml/3.2}'
+            bagschema = "{http://www.opennavsurf.org/schema/bag}"
+            xsi = '{http://www.w3.org/2001/XMLSchema-instance}'
+            et.register_namespace("gmi", "http://www.isotc211.org/2005/gmi")
+            et.register_namespace('gmd', "http://www.isotc211.org/2005/gmd")
+            et.register_namespace('xsi', "http://www.w3.org/2001/XMLSchema-instance")
+            et.register_namespace('gml', "http://www.opengis.net/gml/3.2")
+            et.register_namespace('gco', "http://www.isotc211.org/2005/gco")
+            et.register_namespace('xlink', "http://www.w3.org/1999/xlink")
+            et.register_namespace('bag', "http://www.opennavsurf.org/schema/bag")
+            temporal_hierarchy = [gmd + 'identificationInfo', bagschema + 'BAG_DataIdentification', gmd + 'extent', gmd + 'EX_Extent',
+                                  gmd + 'temporalElement', gmd + 'EX_TemporalExtent', gmd + 'extent', gml + 'TimePeriod']
+            use_gml = gml
+            temporal_root = "/".join(temporal_hierarchy)
+            begin_elem = xml_root.findall(temporal_root + "/" + use_gml + 'beginPosition')
+            end_elem = xml_root.findall(temporal_root + "/" + use_gml + 'endPosition')
+            if not begin_elem or not end_elem:
+                parent = xml_root
+                for elem in temporal_hierarchy:
+                    found = parent.findall(elem)
+                    if not found:
+                        new_elem = et.SubElement(parent, elem)
+                        if "TimePeriod" in elem:
+                            new_elem.set(use_gml + 'id', "temporal-extent-1")
+                            new_elem.set(xsi + 'type', "gml:TimePeriodType")
+                        found = [new_elem]
+                    parent = found[0]
+                if not begin_elem:
+                    begin_elem = [et.SubElement(parent, use_gml+"beginPosition")]
+                if not end_elem:
+                    end_elem = [et.SubElement(parent, use_gml+"endPosition")]
+            begin_elem[0].text = start_time
+            end_elem[0].text = end_time
+            new_metadata = et.tostring(xml_root).decode()
+            del r5['BAG_root']['metadata']
+            r5['BAG_root'].create_dataset("metadata", maxshape=(None,), data=np.array(list(new_metadata), dtype="S1"))
+            r5.close()
+        except:
+            print('Warning: Unable to add time extents to BAG, unknown h5py error')
 
 
 def _generate_caris_rxl(resfile: str, wkt_string: str):
@@ -132,16 +138,19 @@ def _generate_caris_rxl(resfile: str, wkt_string: str):
     """
 
     if os.path.exists(resfile) and wkt_string:
-        rxl_path = os.path.splitext(resfile)[0] + '.bag_rxl'
-        top = et.Element('caris_registration', version="4.0", generation="USER")
-        newtree = et.ElementTree(top)
-        coord_elem = et.SubElement(top, 'coordinate_system')
-        wktelem = et.SubElement(coord_elem, 'wkt')
-        wktelem.text = wkt_string
-        xmlstr = minidom.parseString(et.tostring(top)).toprettyxml(indent="  ", encoding='utf-8').decode()
-        xmlstr = xmlstr.replace('&quot;', '"').encode('utf-8')
-        with open(rxl_path, 'wb') as rxlfile:
-            rxlfile.write(xmlstr)
+        try:
+            rxl_path = os.path.splitext(resfile)[0] + '.bag_rxl'
+            top = et.Element('caris_registration', version="4.0", generation="USER")
+            newtree = et.ElementTree(top)
+            coord_elem = et.SubElement(top, 'coordinate_system')
+            wktelem = et.SubElement(coord_elem, 'wkt')
+            wktelem.text = wkt_string
+            xmlstr = minidom.parseString(et.tostring(top)).toprettyxml(indent="  ", encoding='utf-8').decode()
+            xmlstr = xmlstr.replace('&quot;', '"').encode('utf-8')
+            with open(rxl_path, 'wb') as rxlfile:
+                rxlfile.write(xmlstr)
+        except:
+            print('Warning: Unable to generate Caris RXL file, unknown ElementTree error')
 
 
 class SRGrid(NumpyGrid):
