@@ -1,7 +1,7 @@
 import numpy as np
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
-from bathygrid.algorithms import np_grid_mean, np_grid_shoalest
+from bathygrid.algorithms import np_grid_mean, np_grid_shoalest, calculate_slopes
 from bathygrid.grid_variables import depth_resolution_lookup, minimum_points_per_cell, starting_resolution_density, \
     noise_accomodation_factor, revert_to_lookup_threshold
 
@@ -110,6 +110,7 @@ class SRTile(Tile):
             self.data = np.concatenate([self.data, data])
             for resolution in self.cell_indices:
                 self.cell_indices[resolution] = np.append(self.cell_indices[resolution], np.full(data.shape, -1))
+                self._clear_temp_data(resolution)
         self.point_count_changed = True
 
     def remove_points(self, container, progress_bar: bool = False):
@@ -134,6 +135,7 @@ class SRTile(Tile):
                     self.container[cont] = [self.container[cont][0] - chunk_size, self.container[cont][1] - chunk_size]
             for resolution in self.cell_indices:
                 self.cell_indices[resolution] = self.cell_indices[resolution][msk]
+                self._clear_temp_data(resolution)
             self.data = self.data[msk]
             self.container.pop(container)
             self.point_count_changed = True
@@ -169,6 +171,17 @@ class SRTile(Tile):
             if self.data is not None and 'thu' in self.data.dtype.names:
                 self.cells[resolution]['horizontal_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
 
+    def _clear_temp_data(self, resolution: float):
+        """
+        We have some data that is not flushed to disk, we retain it for experiments like the patch test.  But this data
+        is invalidated when gridding is re-run or when points are added/removed.
+        """
+        if resolution in self.cells:
+            if 'x_slope' in self.cells[resolution]:
+                self.cells[resolution].pop('x_slope')
+            if 'y_slope' in self.cells[resolution]:
+                self.cells[resolution].pop('y_slope')
+
     def _run_mean_grid(self, resolution: float):
         """
         Run the mean algorithm on the Tile data
@@ -194,7 +207,11 @@ class SRTile(Tile):
             depth_val = self.data['z'].compute()
         else:
             depth_val = self.data['z']
-        np_grid_mean(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'], self.cells[resolution]['density'],
+        if not isinstance(self.data, np.ndarray):
+            cindx = self.cell_indices[resolution].compute()
+        else:
+            cindx = self.cell_indices[resolution]
+        np_grid_mean(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'],
                      vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
         if vert_val.size > 0:
@@ -227,13 +244,39 @@ class SRTile(Tile):
             depth_val = self.data['z'].compute()
         else:
             depth_val = self.data['z']
-        np_grid_shoalest(depth_val, self.cell_indices[resolution], self.cells[resolution]['depth'], self.cells[resolution]['density'],
+        if not isinstance(self.data, np.ndarray):
+            cindx = self.cell_indices[resolution].compute()
+        else:
+            cindx = self.cell_indices[resolution]
+        np_grid_shoalest(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'],
                          vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
         if vert_val.size > 0:
             self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
         if horiz_val.size > 0:
             self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
+
+    def _run_slopes(self, resolution: float):
+        if not isinstance(self.data, np.ndarray):
+            x_val = self.data['x'].compute()
+            y_val = self.data['y'].compute()
+            depth_val = self.data['z'].compute()
+        else:
+            x_val = self.data['x']
+            y_val = self.data['y']
+            depth_val = self.data['z']
+        if not isinstance(self.data, np.ndarray):
+            cindx = self.cell_indices[resolution].compute()
+        else:
+            cindx = self.cell_indices[resolution]
+        if not isinstance(self.cell_edges_x[resolution], np.ndarray):
+            cedgex = self.cell_edges_x[resolution].compute()
+            cedgey = self.cell_edges_y[resolution].compute()
+        else:
+            cedgex = self.cell_edges_x[resolution]
+            cedgey = self.cell_edges_y[resolution]
+        self.cells[resolution]['x_slope'], self.cells[resolution]['y_slope'] = calculate_slopes(x_val, y_val, depth_val,
+                                                                                                cindx, cedgex[:-1], cedgey[:-1], visualize=False)
 
     def _return_cell_counts(self, resolution: float):
         grid_x = np.arange(self.min_x, self.max_x, resolution)
@@ -424,6 +467,7 @@ class SRTile(Tile):
             raise ValueError(f'Tile: Resolution must be a power of two, got {resolution}')
         if clear_existing:
             self.clear_grid()
+        self._clear_temp_data(resolution)
 
         if resolution not in self.cells or algorithm != self.algorithm:
             self.algorithm = algorithm
@@ -482,7 +526,7 @@ class SRTile(Tile):
         Union[da.Array, np.ndarray]
             2d array of the gridded data
         """
-        if layer in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']:
+        if layer in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty', 'x_slope', 'y_slope']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(nodatavalue)
         elif layer == 'density':
@@ -500,6 +544,8 @@ class SRTile(Tile):
                 return None
         else:
             resolution = list(self.cells.keys())[0]
+        if layer in ['x_slope', 'y_slope']:
+            self._run_slopes(resolution)
         if layer not in self.cells[resolution]:
             raise ValueError('Tile {}: layer {} not found for resolution {}'.format(self.name, layer, resolution))
         try:

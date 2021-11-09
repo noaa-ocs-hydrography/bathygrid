@@ -1,6 +1,7 @@
 from bathygrid.algorithms import *
 from bathygrid.utilities import is_power_of_two, bin2d_with_indices
 from test_data.test_data import get_grid_data, realdata
+from pytest import approx
 
 
 def test_grid_mean():
@@ -122,8 +123,20 @@ def test_is_power_of_two():
 def test_grid_slopes():
     x, y, z, tvu, thu = realdata['x'], realdata['y'], realdata['z'], realdata['tvu'], realdata['thu']
     cell_edges_x = np.arange(403734, 403790, 8)
-    cell_edges_y = np.arange(4122656, 4122704, 8)
+    cell_edges_y = np.arange(4122656, 4122712, 8)
     cell_indices = bin2d_with_indices(x, y, cell_edges_x, cell_edges_y)
-    calculate_slopes(x, y, z, cell_indices, cell_edges_x, cell_edges_y, visualize=True)
+    slpx, slpy = calculate_slopes(x, y, z, cell_indices, cell_edges_x[:-1], cell_edges_y[:-1], visualize=False)
 
-    urow, ucol = np.unravel_index(cell_indices, (cell_edges_x.shape[0], cell_edges_y.shape[0]))
+    assert slpx[1][1] == approx(0.01538095)
+    assert slpx[1][2] == approx(-0.010140932)
+    assert slpx[1][3] == approx(-0.011870318)
+    assert slpx[2][1] == approx(0.005293401)
+    assert slpx[2][2] == approx(-0.006488629)
+    assert slpx[2][3] == approx(-0.013622731)
+
+    assert slpy[1][1] == approx(-0.00029286137)
+    assert slpy[1][2] == approx(0.004407489)
+    assert slpy[1][3] == approx(-0.0002697181)
+    assert slpy[2][1] == approx(0.00396455)
+    assert slpy[2][2] == approx(-0.002549838)
+    assert slpy[2][3] == approx(-0.0002785997)
