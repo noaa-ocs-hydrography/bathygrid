@@ -45,9 +45,9 @@ def trial_data():
     return depth, vunc, hunc, cell_indices, grid, vuncgrid, huncgrid
 
 
-def trial_grid_mean_numba():
-    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = trial_data()
-    nb_grid_mean(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
+# def trial_grid_mean_numba():
+#     depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = trial_data()
+#     nb_grid_mean(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
 
 
 def trial_grid_mean_numpy():
@@ -55,9 +55,9 @@ def trial_grid_mean_numpy():
     np_grid_mean(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
 
 
-def trial_grid_shoal_numba():
-    depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = trial_data()
-    nb_grid_shoalest(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
+# def trial_grid_shoal_numba():
+#     depth, tvu, thu, cell_indices, grid, tvugrid, thugrid = trial_data()
+#     nb_grid_shoalest(depth, cell_indices, grid, tvu, thu, tvugrid, thugrid)
 
 
 def trial_grid_shoal_numpy():
@@ -68,16 +68,27 @@ def trial_grid_shoal_numpy():
 if __name__ == '__main__':
     import timeit
 
-    trial_grid_mean_numba()  # run once to skip the overhead around import/compiling
-    trial_grid_shoal_numba()  # run once to skip the overhead around import/compiling
+    # trial_grid_mean_numba()  # run once to skip the overhead around import/compiling
+    # trial_grid_shoal_numba()  # run once to skip the overhead around import/compiling
 
-    print('Numba mean: {}'.format(timeit.timeit(trial_grid_mean_numba, number=2)))
+    # print('Numba mean: {}'.format(timeit.timeit(trial_grid_mean_numba, number=2)))
     print('Numpy mean: {}'.format(timeit.timeit(trial_grid_mean_numpy, number=2)))
-    print('Numba shoal: {}'.format(timeit.timeit(trial_grid_shoal_numba, number=2)))
+    # print('Numba shoal: {}'.format(timeit.timeit(trial_grid_shoal_numba, number=2)))
     print('Numpy shoal: {}'.format(timeit.timeit(trial_grid_shoal_numpy, number=2)))
 
 
+from bathygrid.cube import CubeGrid, CubeParameters
+import numpy as np
 
-from bathygrid.convenience import load_grid
-surf = load_grid(r"C:\collab\dasktest\data_dir\EM2040c_NRT2\srgrid_mean_auto")
-surf.export(r"C:\collab\dasktest\data_dir\EM2040c_NRT2\test.tif", export_format='BAG')
+cb = CubeParameters()
+cb.initialize('order1a', grid_resolution_x=1.0, grid_resolution_y=1.0)
+cg = CubeGrid(0.0, 2.0, 2, 2, 1.0, 1.0, cb)
+depth = np.arange(10, 20, 0.5)
+tvu = np.arange(1, 2, 0.05)
+thu = np.arange(0.5, 1.5, 0.05)
+
+easting = np.arange(0, 2, 0.1)
+northing = np.arange(0, 2, 0.1)
+cg.insert_points(depth, thu, tvu, easting, northing)
+
+ans = cg.get_grid_depth()
