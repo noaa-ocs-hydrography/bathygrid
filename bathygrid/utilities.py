@@ -397,7 +397,8 @@ def remove_with_permissionserror(folderpath: str, retries: int = 200, waittime: 
                 if attempt < retries:
                     time.sleep(waittime)
                 else:
-                    print('WARNING: attempted {} retries at {} second interval, unable to complete process'.format(retries, waittime))
+                    print('Removing {}'.format(folderpath))
+                    print('ERROR: attempted {} retries at {} second interval, unable to complete process'.format(retries, waittime))
                     rmtree(folderpath)
 
 

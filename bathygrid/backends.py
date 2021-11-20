@@ -64,6 +64,9 @@ class BaseStorage(BathyGrid):
                 data[ky] = np.array(data[ky])
             except KeyError:
                 data[ky] = self._load_array(folderpath + '/{}'.format(ky)).compute()
+                tmpdata = np.array(data[ky])
+                del data[ky]
+                data[ky] = tmpdata
         for ky in bathygrid_float_to_str:
             data[ky] = float(data[ky])
         for ky in data:
