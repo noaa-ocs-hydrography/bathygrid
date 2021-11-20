@@ -456,6 +456,9 @@ class BathyGrid(BaseGrid):
 
         if self.data is not None:
             self._save_grid()
+            if not isinstance(self.tile_edges_x, np.ndarray):
+                self.tile_edges_x = self.tile_edges_x.compute()
+                self.tile_edges_y = self.tile_edges_y.compute()
             binnum = bin2d_with_indices(self.data['x'], self.data['y'], self.tile_edges_x, self.tile_edges_y)
             unique_locs = np.unique(binnum)
             flat_tiles = self.tiles.ravel()

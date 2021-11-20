@@ -472,6 +472,9 @@ class SRTile(Tile):
         if resolution not in self.cells or algorithm != self.algorithm:
             self.algorithm = algorithm
             self.new_grid(resolution, algorithm)
+        if not isinstance(self.cell_edges_x[resolution], np.ndarray):
+            self.cell_edges_x[resolution] = self.cell_edges_x[resolution].compute()
+            self.cell_edges_y[resolution] = self.cell_edges_y[resolution].compute()
         if resolution not in self.cell_indices:
             self.cell_indices[resolution] = bin2d_with_indices(self.data['x'], self.data['y'], self.cell_edges_x[resolution], self.cell_edges_y[resolution])
         else:
