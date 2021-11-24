@@ -201,6 +201,8 @@ class SRTile(Tile):
             horiz_grid = self.cells[resolution]['horizontal_uncertainty']
         if only_container:
             depth_val = self.data['z'][self.container[only_container][0]:self.container[only_container][1]]
+            self.cells[resolution][only_container] = np.zeros_like(self.cells[resolution]['depth'])
+            self.cells[resolution][only_container + '_density'] = np.zeros_like(self.cells[resolution]['depth'])
         else:
             depth_val = self.data['z']
         if not isinstance(self.data, np.ndarray):
@@ -219,14 +221,15 @@ class SRTile(Tile):
         """
 
         vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx = self._grid_algorithm_initialize(resolution, only_container=only_container)
-        np_grid_mean(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
         if not only_container:
+            np_grid_mean(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
             self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
             if vert_val.size > 0:
                 self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
             if horiz_val.size > 0:
                 self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
         else:
+            np_grid_mean(depth_val, cindx, self.cells[resolution][only_container], self.cells[resolution][only_container + '_density'], vert_val, horiz_val, vert_grid, horiz_grid)
             self.cells[resolution][only_container] = np.round(self.cells[resolution][only_container], 3)
 
     def _run_shoalest_grid(self, resolution: float, only_container: str = None):
@@ -234,13 +237,17 @@ class SRTile(Tile):
         Run the shoalest algorithm on the Tile data
         """
 
-        vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx = self._grid_algorithm_initialize(resolution)
-        np_grid_shoalest(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
-        self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
-        if vert_val.size > 0:
-            self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
-        if horiz_val.size > 0:
-            self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
+        vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx = self._grid_algorithm_initialize(resolution, only_container=only_container)
+        if not only_container:
+            np_grid_shoalest(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
+            self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
+            if vert_val.size > 0:
+                self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
+            if horiz_val.size > 0:
+                self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
+        else:
+            np_grid_shoalest(depth_val, cindx, self.cells[resolution][only_container], self.cells[resolution][only_container + '_density'], vert_val, horiz_val, vert_grid, horiz_grid)
+            self.cells[resolution][only_container] = np.round(self.cells[resolution][only_container], 3)
 
     def _run_slopes(self, resolution: float):
         if 'x_slope' in self.cells[resolution]:
