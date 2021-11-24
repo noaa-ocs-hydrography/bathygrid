@@ -15,7 +15,7 @@ class Tile(TileGrid):
     def __init__(self, min_x: float, min_y: float, size: float):
         super().__init__(min_x, min_y, size)
         self.algorithm = None
-    
+
     def clear_grid(self):
         """
         Clear all data associated with grids
@@ -182,74 +182,60 @@ class SRTile(Tile):
             if 'y_slope' in self.cells[resolution]:
                 self.cells[resolution].pop('y_slope')
 
-    def _run_mean_grid(self, resolution: float):
+    def _grid_algorithm_initialize(self, resolution: float, only_container: str = None):
+        vert_val = np.array([])
+        horiz_val = np.array([])
+        vert_grid = np.array([])
+        horiz_grid = np.array([])
+        if 'tvu' in self.data.dtype.names and not only_container:
+            if not isinstance(self.data, np.ndarray):
+                vert_val = self.data['tvu'].compute()
+            else:
+                vert_val = self.data['tvu']
+            vert_grid = self.cells[resolution]['vertical_uncertainty']
+        if 'thu' in self.data.dtype.names and not only_container:
+            if not isinstance(self.data, np.ndarray):
+                horiz_val = self.data['thu'].compute()
+            else:
+                horiz_val = self.data['thu']
+            horiz_grid = self.cells[resolution]['horizontal_uncertainty']
+        if only_container:
+            depth_val = self.data['z'][self.container[only_container][0]:self.container[only_container][1]]
+        else:
+            depth_val = self.data['z']
+        if not isinstance(self.data, np.ndarray):
+            depth_val = depth_val.compute()
+        if only_container:
+            cindx = self.cell_indices[resolution][self.container[only_container][0]:self.container[only_container][1]]
+        else:
+            cindx = self.cell_indices[resolution]
+        if not isinstance(self.data, np.ndarray):
+            cindx = cindx.compute()
+        return vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx
+
+    def _run_mean_grid(self, resolution: float, only_container: str = None):
         """
         Run the mean algorithm on the Tile data
         """
 
-        vert_val = np.array([])
-        horiz_val = np.array([])
-        vert_grid = np.array([])
-        horiz_grid = np.array([])
-        if 'tvu' in self.data.dtype.names:
-            if not isinstance(self.data, np.ndarray):
-                vert_val = self.data['tvu'].compute()
-            else:
-                vert_val = self.data['tvu']
-            vert_grid = self.cells[resolution]['vertical_uncertainty']
-        if 'thu' in self.data.dtype.names:
-            if not isinstance(self.data, np.ndarray):
-                horiz_val = self.data['thu'].compute()
-            else:
-                horiz_val = self.data['thu']
-            horiz_grid = self.cells[resolution]['horizontal_uncertainty']
-        if not isinstance(self.data, np.ndarray):
-            depth_val = self.data['z'].compute()
+        vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx = self._grid_algorithm_initialize(resolution, only_container=only_container)
+        np_grid_mean(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
+        if not only_container:
+            self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
+            if vert_val.size > 0:
+                self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
+            if horiz_val.size > 0:
+                self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
         else:
-            depth_val = self.data['z']
-        if not isinstance(self.cell_indices[resolution], np.ndarray):
-            cindx = self.cell_indices[resolution].compute()
-        else:
-            cindx = self.cell_indices[resolution]
-        np_grid_mean(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'],
-                     vert_val, horiz_val, vert_grid, horiz_grid)
-        self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
-        if vert_val.size > 0:
-            self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
-        if horiz_val.size > 0:
-            self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
+            self.cells[resolution][only_container] = np.round(self.cells[resolution][only_container], 3)
 
-    def _run_shoalest_grid(self, resolution: float):
+    def _run_shoalest_grid(self, resolution: float, only_container: str = None):
         """
         Run the shoalest algorithm on the Tile data
         """
 
-        vert_val = np.array([])
-        horiz_val = np.array([])
-        vert_grid = np.array([])
-        horiz_grid = np.array([])
-        if 'tvu' in self.data.dtype.names:
-            if not isinstance(self.data, np.ndarray):
-                vert_val = self.data['tvu'].compute()
-            else:
-                vert_val = self.data['tvu']
-            vert_grid = self.cells[resolution]['vertical_uncertainty']
-        if 'thu' in self.data.dtype.names:
-            if not isinstance(self.data, np.ndarray):
-                horiz_val = self.data['thu'].compute()
-            else:
-                horiz_val = self.data['thu']
-            horiz_grid = self.cells[resolution]['horizontal_uncertainty']
-        if not isinstance(self.data, np.ndarray):
-            depth_val = self.data['z'].compute()
-        else:
-            depth_val = self.data['z']
-        if not isinstance(self.cell_indices[resolution], np.ndarray):
-            cindx = self.cell_indices[resolution].compute()
-        else:
-            cindx = self.cell_indices[resolution]
-        np_grid_shoalest(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'],
-                         vert_val, horiz_val, vert_grid, horiz_grid)
+        vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx = self._grid_algorithm_initialize(resolution)
+        np_grid_shoalest(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
         self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
         if vert_val.size > 0:
             self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
@@ -257,6 +243,10 @@ class SRTile(Tile):
             self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
 
     def _run_slopes(self, resolution: float):
+        if 'x_slope' in self.cells[resolution]:
+            # we've already run slope calculations on this object.  These are not saved to disk to conserve space, but
+            #   they will remain in the cells buffer
+            return
         if not isinstance(self.data, np.ndarray):
             x_val = self.data['x'].compute()
             y_val = self.data['y'].compute()
@@ -549,6 +539,11 @@ class SRTile(Tile):
             resolution = list(self.cells.keys())[0]
         if layer in ['x_slope', 'y_slope']:
             self._run_slopes(resolution)
+        elif layer in self.container.keys():
+            if self.algorithm == 'mean':
+                self._run_mean_grid(resolution, only_container=layer)
+            elif self.algorithm == 'shoalest':
+                self._run_shoalest_grid(resolution, only_container=layer)
         if layer not in self.cells[resolution]:
             raise ValueError('Tile {}: layer {} not found for resolution {}'.format(self.name, layer, resolution))
         try:
