@@ -201,8 +201,8 @@ class SRTile(Tile):
             horiz_grid = self.cells[resolution]['horizontal_uncertainty']
         if only_container:
             depth_val = self.data['z'][self.container[only_container][0]:self.container[only_container][1]]
-            self.cells[resolution][only_container] = np.zeros_like(self.cells[resolution]['depth'])
-            self.cells[resolution][only_container + '_density'] = np.zeros_like(self.cells[resolution]['depth'])
+            self.cells[resolution][only_container] = np.full(self.cells[resolution]['depth'].shape, np.float32(np.nan), dtype=np.float32)
+            self.cells[resolution][only_container + '_density'] = np.full(self.cells[resolution]['depth'].shape, 0, dtype=int)
         else:
             depth_val = self.data['z']
         if not isinstance(self.data, np.ndarray):
@@ -272,8 +272,7 @@ class SRTile(Tile):
         else:
             cedgex = self.cell_edges_x[resolution]
             cedgey = self.cell_edges_y[resolution]
-        self.cells[resolution]['x_slope'], self.cells[resolution]['y_slope'] = calculate_slopes(x_val, y_val, depth_val,
-                                                                                                cindx, cedgex[:-1], cedgey[:-1], visualize=False)
+        self.cells[resolution]['x_slope'], self.cells[resolution]['y_slope'] = calculate_slopes(x_val, y_val, depth_val, cindx, cedgex[:-1], cedgey[:-1], visualize=False)
 
     def _return_cell_counts(self, resolution: float):
         grid_x = np.arange(self.min_x, self.max_x, resolution)
@@ -526,6 +525,8 @@ class SRTile(Tile):
         Union[da.Array, np.ndarray]
             2d array of the gridded data
         """
+
+        container_query = False
         if layer in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty', 'x_slope', 'y_slope']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(nodatavalue)
@@ -535,6 +536,9 @@ class SRTile(Tile):
                 nodatavalue = np.int(nodatavalue)
             except ValueError:
                 nodatavalue = 0
+        else:
+            # this must be a container query
+            container_query = True
         if self.is_empty:
             return None
         if not resolution and len(list(self.cells.keys())) > 1:
@@ -546,11 +550,14 @@ class SRTile(Tile):
             resolution = list(self.cells.keys())[0]
         if layer in ['x_slope', 'y_slope']:
             self._run_slopes(resolution)
-        elif layer in self.container.keys():
-            if self.algorithm == 'mean':
-                self._run_mean_grid(resolution, only_container=layer)
-            elif self.algorithm == 'shoalest':
-                self._run_shoalest_grid(resolution, only_container=layer)
+        elif container_query:
+            if layer in self.container.keys():
+                if self.algorithm == 'mean':
+                    self._run_mean_grid(resolution, only_container=layer)
+                elif self.algorithm == 'shoalest':
+                    self._run_shoalest_grid(resolution, only_container=layer)
+            else:
+                self.cells[resolution][layer] = np.full_like(self.cells[resolution]['depth'], nodatavalue)
         if layer not in self.cells[resolution]:
             raise ValueError('Tile {}: layer {} not found for resolution {}'.format(self.name, layer, resolution))
         try:
