@@ -272,7 +272,7 @@ class SRTile(Tile):
         else:
             cedgex = self.cell_edges_x[resolution]
             cedgey = self.cell_edges_y[resolution]
-        self.cells[resolution]['x_slope'], self.cells[resolution]['y_slope'] = calculate_slopes(x_val, y_val, depth_val, cindx, cedgex[:-1], cedgey[:-1], visualize=False)
+        self.cells[resolution]['x_slope'], self.cells[resolution]['y_slope'] = calculate_slopes(x_val, y_val, depth_val, cindx, cedgex, cedgey, visualize=False)
 
     def _return_cell_counts(self, resolution: float):
         grid_x = np.arange(self.min_x, self.max_x, resolution)

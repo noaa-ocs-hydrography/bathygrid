@@ -159,10 +159,10 @@ def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.arr
     np.ndarray
         (m,n) grid of slopes in the x direction for each cell/plane, m = len(cell_edges_x), n = len(cell_edges_y)
     np.ndarray
-        (m,n) grid of slopes in the x direction for each cell/plane, m = len(cell_edges_x), n = len(cell_edges_y)
+        (m,n) grid of slopes in the x direction for each cell/plane, m = len(cell_edges_x) - 1, n = len(cell_edges_y) - 1
     """
 
-    grid_shape = (cell_edges_y.shape[0], cell_edges_x.shape[0])
+    grid_shape = (cell_edges_y.shape[0] - 1, cell_edges_x.shape[0] - 1)
     x_slope_grid = np.full(grid_shape, np.float32(np.nan), dtype=np.float32)
     y_slope_grid = np.full(grid_shape, np.float32(np.nan), dtype=np.float32)
     resolution = cell_edges_x[1] - cell_edges_x[0]
@@ -172,11 +172,11 @@ def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.arr
         ax = plt.subplot(111, projection='3d')
         ax.scatter(x, y, z, color='b')
         lstsq_grid = np.full(grid_shape, np.float32(np.nan), dtype=np.float32)
-        lstsq_x, lstsq_y = np.meshgrid(cell_edges_x + (resolution / 2), cell_edges_y + (resolution / 2))
+        lstsq_x, lstsq_y = np.meshgrid(cell_edges_x[:-1] + (resolution / 2), cell_edges_y[:-1] + (resolution / 2))
 
     cell_sort = np.argsort(cell_indices)
     unique_indices, uidx, ucounts = np.unique(cell_indices[cell_sort], return_index=True, return_counts=True)
-    urow, ucol = np.unravel_index(unique_indices, (cell_edges_y.shape[0] - 1, cell_edges_x.shape[0] - 1))
+    urow, ucol = np.unravel_index(unique_indices, grid_shape)
 
     z_split = np.split(z[cell_sort], uidx)[1:]
     x_split = np.split(x[cell_sort], uidx)[1:]
