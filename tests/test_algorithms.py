@@ -140,3 +140,6 @@ def test_grid_slopes():
     assert slpy[2][1] == approx(0.00396455)
     assert slpy[2][2] == approx(-0.002549838)
     assert slpy[2][3] == approx(-0.0002785997)
+
+    assert slpx.shape == (cell_edges_x.shape[0], cell_edges_y.shape[0])
+    assert slpy.shape == (cell_edges_x.shape[0], cell_edges_y.shape[0])
