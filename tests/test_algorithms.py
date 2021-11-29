@@ -125,7 +125,7 @@ def test_grid_slopes():
     cell_edges_x = np.arange(403734, 403790, 8)
     cell_edges_y = np.arange(4122656, 4122712, 8)
     cell_indices = bin2d_with_indices(x, y, cell_edges_x, cell_edges_y)
-    slpx, slpy = calculate_slopes(x, y, z, cell_indices, cell_edges_x[:-1], cell_edges_y[:-1], visualize=False)
+    slpx, slpy = calculate_slopes(x, y, z, cell_indices, cell_edges_x, cell_edges_y, visualize=False)
 
     assert slpx[1][1] == approx(0.01538095)
     assert slpx[1][2] == approx(-0.010140932)

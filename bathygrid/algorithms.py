@@ -129,11 +129,11 @@ def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
     return grid, tvu_grid, thu_grid
 
 
-def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.array, grid_x: np.array, grid_y: np.array,
+def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.array, cell_edges_x: np.array, cell_edges_y: np.array,
                      visualize: bool = False):
     """
     Perform least squares regression to get plane equation of best fit plane for each grid cell.  grid cells are defined
-    by the provided (grid_x, grid_y) edge values.
+    by the provided (cell_edges_x, cell_edges_y) edge values.
 
     Optionally visualize the least squares planes using matplotlib wireframe
 
@@ -147,9 +147,9 @@ def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.arr
         1d z values
     cell_indices
         1d index of which cell each point belongs to
-    grid_x
+    cell_edges_x
         1d x values for the grid, the min x for each grid cell
-    grid_y
+    cell_edges_y
         1d y values for the grid, the min y for each grid cell
     visualize
         if True, plots the points and planes
@@ -157,27 +157,26 @@ def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.arr
     Returns
     -------
     np.ndarray
-        (m,n) grid of slopes in the x direction for each cell/plane, m = len(grid_x), n = len(grid_y)
+        (m,n) grid of slopes in the x direction for each cell/plane, m = len(cell_edges_x), n = len(cell_edges_y)
     np.ndarray
-        (m,n) grid of slopes in the x direction for each cell/plane, m = len(grid_x), n = len(grid_y)
+        (m,n) grid of slopes in the x direction for each cell/plane, m = len(cell_edges_x), n = len(cell_edges_y)
     """
 
-    x_slope_grid = np.full((grid_x.shape[0], grid_y.shape[0]), np.float32(np.nan), dtype=np.float32)
-    y_slope_grid = np.full((grid_x.shape[0], grid_y.shape[0]), np.float32(np.nan), dtype=np.float32)
-    resolution = grid_x[1] - grid_x[0]
+    grid_shape = (cell_edges_y.shape[0] - 1, cell_edges_x.shape[0] - 1)
+    x_slope_grid = np.full(grid_shape, np.float32(np.nan), dtype=np.float32)
+    y_slope_grid = np.full(grid_shape, np.float32(np.nan), dtype=np.float32)
+    resolution = cell_edges_x[1] - cell_edges_x[0]
 
     if visualize:
         plt.figure()
         ax = plt.subplot(111, projection='3d')
         ax.scatter(x, y, z, color='b')
-        lstsq_grid = np.full((grid_x.shape[0], grid_y.shape[0]), np.float32(np.nan), dtype=np.float32)
-        lstsq_x, lstsq_y = np.meshgrid(grid_x + (resolution / 2), grid_y + (resolution / 2))
-        lstsq_x = lstsq_x.T
-        lstsq_y = lstsq_y.T
+        lstsq_grid = np.full(grid_shape, np.float32(np.nan), dtype=np.float32)
+        lstsq_x, lstsq_y = np.meshgrid(cell_edges_x[:-1] + (resolution / 2), cell_edges_y[:-1] + (resolution / 2))
 
     cell_sort = np.argsort(cell_indices)
     unique_indices, uidx, ucounts = np.unique(cell_indices[cell_sort], return_index=True, return_counts=True)
-    urow, ucol = np.unravel_index(unique_indices, (grid_x.shape[0], grid_y.shape[0]))
+    urow, ucol = np.unravel_index(unique_indices, grid_shape)
 
     z_split = np.split(z[cell_sort], uidx)[1:]
     x_split = np.split(x[cell_sort], uidx)[1:]
@@ -190,19 +189,19 @@ def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.arr
         fit, residual, rnk, s = np.linalg.lstsq(a_data, b_data, rcond=None)
 
         # first get the z val for the cell corner, where you have minx,miny
-        minz = fit[0] * grid_x[col] + fit[1] * grid_y[row] + fit[2]
+        minz = fit[0] * cell_edges_x[col] + fit[1] * cell_edges_y[row] + fit[2]
         # then get the z val for the next corner, ahead in the x direction
-        maxz_xdirect = fit[0] * (grid_x[col] + resolution) + fit[1] * grid_y[row] + fit[2]
+        maxz_xdirect = fit[0] * (cell_edges_x[col] + resolution) + fit[1] * cell_edges_y[row] + fit[2]
         # then get the z val for the next corner, ahead in the y direction
-        maxz_ydirect = fit[0] * grid_x[col] + fit[1] * (grid_y[row] + resolution) + fit[2]
+        maxz_ydirect = fit[0] * cell_edges_x[col] + fit[1] * (cell_edges_y[row] + resolution) + fit[2]
         # x slope is the change in z in the x direction divided by the change in x (which is always the resolution)
         x_slope_grid[row, col] = (maxz_xdirect - minz) / resolution
         # y slope is the change in z in the y direction divided by the change in y (which is always the resolution)
         y_slope_grid[row, col] = (maxz_ydirect - minz) / resolution
         if visualize:
-            lstsq_grid[col, row] = fit[0] * lstsq_x[col, row] + fit[1] * lstsq_y[col, row] + fit[2]
+            lstsq_grid[row, col] = fit[0] * lstsq_x[row, col] + fit[1] * lstsq_y[row, col] + fit[2]
     if visualize:
-        ax.plot_wireframe(lstsq_x, lstsq_y, lstsq_grid, color='k')
+        ax.plot_wireframe(lstsq_x.T, lstsq_y.T, lstsq_grid.T, color='k')
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlabel('z')

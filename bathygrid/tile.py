@@ -211,7 +211,7 @@ class SRTile(Tile):
             cindx = self.cell_indices[resolution][self.container[only_container][0]:self.container[only_container][1]]
         else:
             cindx = self.cell_indices[resolution]
-        if not isinstance(self.data, np.ndarray):
+        if not isinstance(cindx, np.ndarray):
             cindx = cindx.compute()
         return vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx
 
