@@ -188,16 +188,10 @@ def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.arr
         b_data = np.column_stack([z_cell])
         fit, residual, rnk, s = np.linalg.lstsq(a_data, b_data, rcond=None)
 
-        # first get the z val for the cell corner, where you have minx,miny
-        minz = fit[0] * cell_edges_x[col] + fit[1] * cell_edges_y[row] + fit[2]
-        # then get the z val for the next corner, ahead in the x direction
-        maxz_xdirect = fit[0] * (cell_edges_x[col] + resolution) + fit[1] * cell_edges_y[row] + fit[2]
-        # then get the z val for the next corner, ahead in the y direction
-        maxz_ydirect = fit[0] * cell_edges_x[col] + fit[1] * (cell_edges_y[row] + resolution) + fit[2]
-        # x slope is the change in z in the x direction divided by the change in x (which is always the resolution)
-        x_slope_grid[row, col] = (maxz_xdirect - minz) / resolution
-        # y slope is the change in z in the y direction divided by the change in y (which is always the resolution)
-        y_slope_grid[row, col] = (maxz_ydirect - minz) / resolution
+        # x slope is the change in z in the x direction, which is the a parameter in z = ax + by + c (or the first entry in fit)
+        x_slope_grid[row, col] = fit[0][0]
+        # y slope is the change in z in the y direction, which is the b parameter in z = ax + by + c (or the second entry in fit)
+        y_slope_grid[row, col] = fit[1][0]
         if visualize:
             lstsq_grid[row, col] = fit[0] * lstsq_x[row, col] + fit[1] * lstsq_y[row, col] + fit[2]
     if visualize:
