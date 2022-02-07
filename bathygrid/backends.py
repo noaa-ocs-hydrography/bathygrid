@@ -1,4 +1,6 @@
 import os
+import time
+
 import numpy as np
 import json
 import dask.array as da
@@ -219,7 +221,7 @@ class BaseStorage(BathyGrid):
         Parameters
         ----------
         tile
-            tile object that needs it's metdata loaded
+            tile object that needs to be saved
         flat_index
             1d index of the flattened tiles
         """
