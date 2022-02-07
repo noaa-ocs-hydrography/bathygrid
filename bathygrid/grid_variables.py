@@ -17,6 +17,10 @@ noise_accomodation_factor = 0.75
 revert_to_lookup_threshold = 0.75
 
 # BACKEND
+# allowable grid root names, we use this to check for grid type on reload and a number of other things
+allowable_grid_root_names = ['SRGrid_Root', 'VRGridTile_Root', 'SRGridZarr_Root', 'VRGridTileZarr_Root']
+sr_grid_root_names = ['SRGrid_Root', 'SRGridZarr_Root']
+vr_grid_root_names = ['VRGridTile_Root', 'VRGridTileZarr_Root']
 # these are the attributes that are written to disk for grids, see backend
 bathygrid_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'min_time', 'max_time', 'width', 'height', 'origin_x',
                           'origin_y', 'container', 'tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y',

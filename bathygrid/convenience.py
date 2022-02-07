@@ -1,7 +1,8 @@
 import os
 from bathygrid.bgrid import BathyGrid
-from bathygrid.maingrid import SRGrid, VRGridTile
+from bathygrid.maingrid import SRGrid, VRGridTile, SRGridZarr, VRGridTileZarr
 from bathygrid.utilities import is_power_of_two, create_folder
+from bathygrid.grid_variables import allowable_grid_root_names
 
 
 def _validate_load_path(folder_path: str):
@@ -26,7 +27,7 @@ def _validate_load_path(folder_path: str):
     subfolders = os.listdir(folder_path)
     if len(subfolders) == 0:
         raise IOError('Found no root folders in {}, expected a root folder like "VRGridTile_Root"'.format(folder_path))
-    valid_subfolders = [fldr for fldr in subfolders if fldr in ['VRGridTile_Root', 'SRGrid_Root']]
+    valid_subfolders = [fldr for fldr in subfolders if fldr in allowable_grid_root_names]
     if len(valid_subfolders) > 1:
         raise IOError('Found multiple subfolders in {}, expected one root folder like "VRGridTile_Root"'.format(folder_path))
     elif len(valid_subfolders) == 0:
@@ -72,6 +73,10 @@ def load_grid(folder_path: str):
         grid_class = SRGrid()
     elif root_name == 'VRGridTile_Root':
         grid_class = VRGridTile()
+    elif root_name == 'SRGridZarr_Root':
+        grid_class = SRGridZarr()
+    elif root_name == 'VRGridTileZarr_Root':
+        grid_class = VRGridTileZarr()
     else:
         raise NotImplementedError('{} is not a valid grid type'.format(root_name))
     grid_class.load(folder_path)

@@ -10,7 +10,7 @@ from bathygrid.grids import BaseGrid
 from bathygrid.tile import SRTile, Tile
 from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar, \
     utc_seconds_to_formatted_string, formatted_string_to_utc_seconds
-from bathygrid.grid_variables import depth_resolution_lookup, maximum_chunk_dimension
+from bathygrid.grid_variables import depth_resolution_lookup, maximum_chunk_dimension, sr_grid_root_names
 from bathygrid.__version__ import __version__ as bathyvers
 
 
@@ -913,7 +913,7 @@ class BathyGrid(BaseGrid):
                         continue
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
-                elif isinstance(tile, SRTile) and auto_resolution and self.name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
+                elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
                 else:
                     rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
@@ -1323,7 +1323,7 @@ def _gridding_parallel(data_blob: list):
     tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name = data_blob
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
-    elif isinstance(tile, SRTile) and auto_resolution and grid_name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
+    elif isinstance(tile, SRTile) and auto_resolution and grid_name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     else:
         rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
