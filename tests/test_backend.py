@@ -1,6 +1,6 @@
 from pytest import approx
+import numpy as np
 
-from bathygrid.maingrid import *
 from bathygrid.convenience import *
 from test_data.test_data import closedata, get_test_path, onlyzdata, smalldata
 from bathygrid.utilities import utc_seconds_to_formatted_string
@@ -60,6 +60,43 @@ def _expected_srzarr_data(bathygrid):
     assert bathygrid.vertical_reference == 'waterline'
     assert bathygrid.sub_type == 'srtile'
     assert bathygrid.storage_type == 'zarr'
+
+
+def _expected_srgridzarr_backscatter(bathygrid):
+    rootpath = os.path.join(bathygrid.output_folder, bathygrid.name)
+    assert os.path.exists(rootpath)
+    numtiles = np.count_nonzero(bathygrid.tiles)
+    fldrs = [fldr for fldr in os.listdir(rootpath) if os.path.isdir(os.path.join(rootpath, fldr))]
+    assert len(fldrs) == numtiles + 5  # five for the five extra array folders, tile edges, origin, etc.
+    assert os.path.exists(os.path.join(rootpath, 'metadata.json'))
+
+    grid_tile = bathygrid.tiles[0][0]  # pull out random populated tile
+    grid_tile_rootpath = os.path.join(rootpath, grid_tile.name)
+    assert os.path.exists(grid_tile_rootpath)
+    assert os.path.exists(os.path.join(grid_tile_rootpath, 'data'))
+    assert os.path.exists(os.path.join(grid_tile_rootpath, 'metadata.json'))
+
+    assert bathygrid.name == 'SRGridZarr_Root'
+    assert bathygrid.output_folder
+    assert bathygrid.container == {'test1': ['line1', 'line2']}
+    assert 'test1' in bathygrid.container_timestamp
+    assert bathygrid.min_x == 0.0
+    assert bathygrid.min_y == 0.0
+    assert bathygrid.max_x == 2048.0
+    assert bathygrid.max_y == 2048.0
+    assert bathygrid.epsg == 26917
+    assert bathygrid.vertical_reference is None
+    assert bathygrid.sub_type == 'srtile'
+    assert bathygrid.storage_type == 'zarr'
+    assert bathygrid.is_backscatter
+    assert bathygrid.mean_depth == 17.5
+    assert bathygrid.resolutions == np.array([1.0])
+    assert bathygrid.grid_algorithm == 'mean'
+
+    grid_tile = bathygrid.tiles[0][0]  # pull out random populated tile
+    assert grid_tile.algorithm == 'mean'
+    assert list(grid_tile.cells.keys()) == [1.0]
+    assert list(grid_tile.cells[1.0].keys()) == ['intensity', 'density']
 
 
 def _expected_srgrid_griddata(bathygrid, include_uncertainties: bool = True):
@@ -400,6 +437,21 @@ def test_vrgridzarr_after_load():
     bg = load_grid(bg.output_folder)
     _expected_vrgridzarr_data(bg)
     _expected_vrgrid_griddata(bg)
+
+
+def test_srgrid_backscatter():
+    bg = SRGridZarr(tile_size=1024, output_folder=get_test_path(), is_backscatter=True)
+    bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917)
+    bg.grid(resolution=1)
+    _expected_srgridzarr_backscatter(bg)
+
+
+def test_srgrid_backscatter_after_load():
+    bg = SRGridZarr(tile_size=1024, output_folder=get_test_path(), is_backscatter=True)
+    bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917)
+    bg.grid(resolution=1)
+    bg = load_grid(bg.output_folder)
+    _expected_srgridzarr_backscatter(bg)
 
 
 def test_srgrid_onlyz():

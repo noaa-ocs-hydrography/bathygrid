@@ -42,9 +42,17 @@ class SRTile(Tile):
     times with different resolutions without using clear_existing
     """
 
-    def __init__(self, min_x: float = 0.0, min_y: float = 0.0, size: float = 0.0):
+    def __init__(self, min_x: float = 0.0, min_y: float = 0.0, size: float = 0.0, is_backscatter: bool = False):
         super().__init__(min_x, min_y, size)
         self.point_count_changed = False
+        self.is_backscatter = is_backscatter
+
+    @property
+    def depth_key(self):
+        if self.is_backscatter:
+            return 'intensity'
+        else:
+            return 'depth'
 
     @property
     def mean_depth(self):
@@ -57,7 +65,8 @@ class SRTile(Tile):
     def cell_count(self):
         final_count = {}
         for rez in self.cells:
-            final_count[rez] = int(np.count_nonzero(~np.isnan(self.cells[rez]['depth'])))
+            first_key = list(self.cells[rez].keys())[0]
+            final_count[rez] = int(np.count_nonzero(~np.isnan(self.cells[rez][first_key])))
         return final_count
 
     def _calculate_resolution_lookup(self):
@@ -164,7 +173,7 @@ class SRTile(Tile):
         grid_shape = (grid_x.size, grid_y.size)
         self.cells[resolution] = {}
         if algorithm in ['mean', 'shoalest']:
-            self.cells[resolution]['depth'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
+            self.cells[resolution][self.depth_key] = np.full(grid_shape, nodatavalue, dtype=np.float32)
             self.cells[resolution]['density'] = np.full(grid_shape, 0, dtype=int)
             if self.data is not None and 'tvu' in self.data.dtype.names:
                 self.cells[resolution]['vertical_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
@@ -201,8 +210,8 @@ class SRTile(Tile):
             horiz_grid = self.cells[resolution]['horizontal_uncertainty']
         if only_container:
             depth_val = self.data['z'][self.container[only_container][0]:self.container[only_container][1]]
-            self.cells[resolution][only_container] = np.full(self.cells[resolution]['depth'].shape, np.float32(np.nan), dtype=np.float32)
-            self.cells[resolution][only_container + '_density'] = np.full(self.cells[resolution]['depth'].shape, 0, dtype=int)
+            self.cells[resolution][only_container] = np.full(self.cells[resolution][self.depth_key].shape, np.float32(np.nan), dtype=np.float32)
+            self.cells[resolution][only_container + '_density'] = np.full(self.cells[resolution][self.depth_key].shape, 0, dtype=int)
         else:
             depth_val = self.data['z']
         if not isinstance(self.data, np.ndarray):
@@ -222,8 +231,8 @@ class SRTile(Tile):
 
         vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx = self._grid_algorithm_initialize(resolution, only_container=only_container)
         if not only_container:
-            np_grid_mean(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
-            self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
+            np_grid_mean(depth_val, cindx, self.cells[resolution][self.depth_key], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
+            self.cells[resolution][self.depth_key] = np.round(self.cells[resolution][self.depth_key], 3)
             if vert_val.size > 0:
                 self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
             if horiz_val.size > 0:
@@ -239,8 +248,8 @@ class SRTile(Tile):
 
         vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx = self._grid_algorithm_initialize(resolution, only_container=only_container)
         if not only_container:
-            np_grid_shoalest(depth_val, cindx, self.cells[resolution]['depth'], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
-            self.cells[resolution]['depth'] = np.round(self.cells[resolution]['depth'], 3)
+            np_grid_shoalest(depth_val, cindx, self.cells[resolution][self.depth_key], self.cells[resolution]['density'], vert_val, horiz_val, vert_grid, horiz_grid)
+            self.cells[resolution][self.depth_key] = np.round(self.cells[resolution][self.depth_key], 3)
             if vert_val.size > 0:
                 self.cells[resolution]['vertical_uncertainty'] = np.round(self.cells[resolution]['vertical_uncertainty'], 3)
             if horiz_val.size > 0:
@@ -477,8 +486,8 @@ class SRTile(Tile):
             if not isinstance(self.cell_indices[resolution], np.ndarray):
                 self.cell_indices[resolution] = self.cell_indices[resolution].compute()
             self.cell_indices[resolution] = np.array(self.cell_indices[resolution])  # can't be a memmap object, we need to overwrite data on disk
-            if not isinstance(self.cells[resolution]['depth'], np.ndarray):
-                self.cells[resolution]['depth'] = self.cells[resolution]['depth'].compute()
+            if not isinstance(self.cells[resolution][self.depth_key], np.ndarray):
+                self.cells[resolution][self.depth_key] = self.cells[resolution][self.depth_key].compute()
                 self.cells[resolution]['density'] = self.cells[resolution]['density'].compute()
                 if 'vertical_uncertainty' in self.cells[resolution]:
                     self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution]['vertical_uncertainty'].compute()
@@ -489,7 +498,7 @@ class SRTile(Tile):
                 self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points], self.data['y'][new_points],
                                                                                self.cell_edges_x[resolution], self.cell_edges_y[resolution])
 
-            self.cells[resolution]['depth'] = np.full(self.cells[resolution]['depth'].shape, np.nan, dtype=np.float32)
+            self.cells[resolution][self.depth_key] = np.full(self.cells[resolution][self.depth_key].shape, np.nan, dtype=np.float32)
             self.cells[resolution]['density'] = np.full(self.cells[resolution]['density'].shape, 0, dtype=int)
             if 'vertical_uncertainty' in self.cells[resolution]:
                 self.cells[resolution]['vertical_uncertainty'] = np.full(self.cells[resolution]['vertical_uncertainty'].shape, np.nan, dtype=np.float32)
@@ -527,7 +536,7 @@ class SRTile(Tile):
         """
 
         container_query = False
-        if layer in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty', 'x_slope', 'y_slope']:
+        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'x_slope', 'y_slope']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(nodatavalue)
         elif layer == 'density':
@@ -557,7 +566,7 @@ class SRTile(Tile):
                 elif self.algorithm == 'shoalest':
                     self._run_shoalest_grid(resolution, only_container=layer)
             else:
-                self.cells[resolution][layer] = np.full_like(self.cells[resolution]['depth'], nodatavalue)
+                self.cells[resolution][layer] = np.full_like(self.cells[resolution][self.depth_key], nodatavalue)
         if layer not in self.cells[resolution]:
             raise ValueError('Tile {}: layer {} not found for resolution {}'.format(self.name, layer, resolution))
         try:

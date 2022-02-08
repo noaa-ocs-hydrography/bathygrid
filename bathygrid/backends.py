@@ -5,22 +5,22 @@ import numpy as np
 import json
 import dask.array as da
 
-from bathygrid.bgrid import BathyGrid
+from bathygrid.bgrid import OperationalGrid
 from bathygrid.tile import Tile, SRTile
 from bathygrid.utilities import print_progress_bar, remove_with_permissionserror
 from bathygrid.grid_variables import bathygrid_desired_keys, bathygrid_float_to_str, bathygrid_numpy_to_list, \
     tile_desired_keys, tile_float_to_str
 
 
-class BaseStorage(BathyGrid):
+class BaseStorage(OperationalGrid):
     """
     Base class for handling saving/loading from disk.  Uses json for saving metadata to file.  Inherit this class
     to create a storage backend for the point/grid data.
     """
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
-                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = ''):
+                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = '', is_backscatter: bool = False):
         super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
-                         set_extents_manually=set_extents_manually, output_folder=output_folder)
+                         set_extents_manually=set_extents_manually, output_folder=output_folder, is_backscatter=is_backscatter)
 
     def _save_bathygrid_metadata(self, folderpath: str):
         """
@@ -349,9 +349,9 @@ class NumpyGrid(BaseStorage):
     """
 
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
-                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = ''):
+                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = '', is_backscatter: bool = False):
         super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
-                         set_extents_manually=set_extents_manually, output_folder=output_folder)
+                         set_extents_manually=set_extents_manually, output_folder=output_folder, is_backscatter=is_backscatter)
         self.storage_type = 'numpy'
 
     def _numpygrid_todask(self, arr):
@@ -378,11 +378,12 @@ class NumpyGrid(BaseStorage):
             self._save_array(folderpath + '/data', tile.data)
         if not only_points:
             for resolution in tile.cells.keys():
-                self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
-                try:  # added in bathygrid 1.1.0
+                if 'depth' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
+                if 'intensity' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_intensity'.format(resolution), tile.cells[resolution]['intensity'])
+                if 'density' in tile.cells[resolution]:  # added in bathygrid 1.1.0
                     self._save_array(folderpath + '/cells_{}_density'.format(resolution), tile.cells[resolution]['density'])
-                except:
-                    pass
                 if 'vertical_uncertainty' in tile.cells[resolution]:
                     self._save_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), tile.cells[resolution]['vertical_uncertainty'])
                 if 'horizontal_uncertainty' in tile.cells[resolution]:
@@ -412,11 +413,12 @@ class NumpyGrid(BaseStorage):
         if not only_points:
             for resolution in resolutions:
                 tile.cells[resolution] = {}
-                tile.cells[resolution]['depth'] = self._load_array(folderpath + '/cells_{}_depth'.format(resolution))
-                try:  # added in bathygrid 1.1.0
+                if os.path.exists(folderpath + '/cells_{}_depth'.format(resolution)):
+                    tile.cells[resolution]['depth'] = self._load_array(folderpath + '/cells_{}_depth'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_intensity'.format(resolution)):
+                    tile.cells[resolution]['intensity'] = self._load_array(folderpath + '/cells_{}_intensity'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_density'.format(resolution)):  # added in bathygrid 1.1.0
                     tile.cells[resolution]['density'] = self._load_array(folderpath + '/cells_{}_density'.format(resolution))
-                except:
-                    pass
                 if os.path.exists(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution)):
                     tile.cells[resolution]['vertical_uncertainty'] = self._load_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
@@ -470,9 +472,9 @@ class ZarrGrid(BaseStorage):
     """
 
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
-                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = ''):
+                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = '', is_backscatter: bool = False):
         super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
-                         set_extents_manually=set_extents_manually, output_folder=output_folder)
+                         set_extents_manually=set_extents_manually, output_folder=output_folder, is_backscatter=is_backscatter)
         self.storage_type = 'zarr'
 
     def _zarrgrid_todask(self, arr):
@@ -514,11 +516,12 @@ class ZarrGrid(BaseStorage):
             self._save_array(folderpath + '/data', tile.data)
         if not only_points:
             for resolution in tile.cells.keys():
-                self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
-                try:  # added in bathygrid 1.1.0
+                if 'depth' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
+                if 'intensity' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_intensity'.format(resolution), tile.cells[resolution]['intensity'])
+                if 'density' in tile.cells[resolution]:  # added in bathygrid 1.1.0
                     self._save_array(folderpath + '/cells_{}_density'.format(resolution), tile.cells[resolution]['density'])
-                except:
-                    pass
                 if 'vertical_uncertainty' in tile.cells[resolution]:
                     self._save_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), tile.cells[resolution]['vertical_uncertainty'])
                 if 'horizontal_uncertainty' in tile.cells[resolution]:
@@ -548,11 +551,12 @@ class ZarrGrid(BaseStorage):
         if not only_points:
             for resolution in resolutions:
                 tile.cells[resolution] = {}
-                tile.cells[resolution]['depth'] = self._load_array(folderpath + '/cells_{}_depth'.format(resolution))
-                try:  # added in bathygrid 1.1.0
+                if os.path.exists(folderpath + '/cells_{}_depth'.format(resolution)):
+                    tile.cells[resolution]['depth'] = self._load_array(folderpath + '/cells_{}_depth'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_intensity'.format(resolution)):
+                    tile.cells[resolution]['intensity'] = self._load_array(folderpath + '/cells_{}_intensity'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_density'.format(resolution)):  # added in bathygrid 1.1.0
                     tile.cells[resolution]['density'] = self._load_array(folderpath + '/cells_{}_density'.format(resolution))
-                except:
-                    pass
                 if os.path.exists(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution)):
                     tile.cells[resolution]['vertical_uncertainty'] = self._load_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):

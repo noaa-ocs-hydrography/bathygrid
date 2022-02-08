@@ -365,6 +365,16 @@ def test_VRGridTile_variable_rez_grid():
     assert bg.tiles[3][3].tiles[7][7].cells[128.0]['vertical_uncertainty'][0][0] == approx(1.647, 0.001)
 
 
+def test_SRGrid_backscatter():
+    bg = SRGridZarr(tile_size=1024, is_backscatter=True)
+    bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid(resolution=8.0)
+    assert np.array_equal(bg.resolutions, np.array([8.0]))
+    assert bg.layer_names == ['intensity', 'density']
+    assert bg.cell_count == {8.0: 16}
+    assert bg.coverage_area == 128.0
+
+
 def test_grid_names():
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
