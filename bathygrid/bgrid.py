@@ -332,6 +332,10 @@ class BathyGrid(BaseGrid):
         ----------
         resolution
             float resolution that we want to use to build the grid
+        layername
+            select layername to use for building the grid
+        nodatavalue
+            fill layer grid with nodatavalue where there is no data
         """
 
         if layername in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty']:
@@ -491,6 +495,7 @@ class BathyGrid(BaseGrid):
                 if flat_tiles[ul].is_empty:
                     flat_tiles[ul] = None
                 if self.sub_type in ['srtile', 'quadtile']:
+                    # just save and reload the points
                     self._save_tile(flat_tiles[ul], ul, only_points=True)
                     self._load_tile(ul, only_points=True)
             self.number_of_tiles = np.count_nonzero(self.tiles != None)
@@ -579,6 +584,7 @@ class BathyGrid(BaseGrid):
                         if tile.is_empty:
                             self._remove_tile(cnt)
                     if self.sub_type in ['srtile', 'quadtile']:
+                        # just save and reload the points
                         self._save_tile(flat_tiles[cnt], cnt, only_points=True)
                         self._load_tile(cnt, only_points=True)
             if self.is_empty:
@@ -933,6 +939,7 @@ class BathyGrid(BaseGrid):
                     if rz not in self.resolutions:
                         self.resolutions.append(rz)
             if self.sub_type in ['srtile', 'quadtile']:
+                # just save and reload the gridded data
                 self._save_tile(tile, cnt, only_grid=True)
                 self._load_tile(cnt, only_grid=True)
         self.resolutions = np.sort(np.unique(self.resolutions)).tolist()
@@ -954,6 +961,7 @@ class BathyGrid(BaseGrid):
         for result_tile, tidx in zip(tiles, tile_indices):
             self.tiles.flat[tidx] = result_tile
             if self.sub_type in ['srtile', 'quadtile']:
+                # just save and reload the gridded data
                 self._save_tile(result_tile, tidx, only_grid=True)
                 self._load_tile(tidx, only_grid=True)
         for rez in resolutions:

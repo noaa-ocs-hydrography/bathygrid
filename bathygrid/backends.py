@@ -224,6 +224,10 @@ class BaseStorage(OperationalGrid):
             tile object that needs to be saved
         flat_index
             1d index of the flattened tiles
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if self.output_folder:
@@ -288,6 +292,10 @@ class BaseStorage(OperationalGrid):
         ----------
         flat_index
             1d index of the flattened tiles
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if self.output_folder:
@@ -372,6 +380,17 @@ class NumpyGrid(BaseStorage):
     def _save_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         """
         Convert the arrays to dask and save them as stacked numpy arrays
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        folderpath
+            folderpath for the root of the tile data on disk
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if not only_grid:
@@ -397,6 +416,17 @@ class NumpyGrid(BaseStorage):
     def _load_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         """
         lazy load from the saved tile arrays into dask arrays and populate the tile attributes.
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        folderpath
+            folderpath for the root of the tile data on disk
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         resolutions = []
@@ -437,6 +467,15 @@ class NumpyGrid(BaseStorage):
 
         With Numpy memmap, this is a bit weird.  You have to call del to break the link and then replace the reference.
         See below.
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if not only_grid and tile.data is not None:
@@ -510,6 +549,17 @@ class ZarrGrid(BaseStorage):
     def _save_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         """
         Convert the arrays to dask and save them as stacked numpy arrays
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        folderpath
+            folderpath for the root of the tile data on disk
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if not only_grid:
@@ -535,6 +585,17 @@ class ZarrGrid(BaseStorage):
     def _load_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         """
         lazy load from the saved tile arrays into dask arrays and populate the tile attributes.
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        folderpath
+            folderpath for the root of the tile data on disk
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         resolutions = []
@@ -575,6 +636,15 @@ class ZarrGrid(BaseStorage):
 
         With Numpy memmap, this is a bit weird.  You have to call del to break the link and then replace the reference.
         See below.
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if not only_grid and tile.data is not None:

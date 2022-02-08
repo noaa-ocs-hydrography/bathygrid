@@ -86,7 +86,7 @@ def load_grid(folder_path: str):
 
 
 def create_grid(folder_path: str = '', grid_type: str = 'single_resolution', grid_backend: str = 'zarr',
-                tile_size: float = 1024.0, subtile_size: float = 128):
+                tile_size: float = 1024.0, subtile_size: float = 128, is_backscatter: bool = False):
     """
     Create and return a new bathygrid instance.  Use add points and grid methods to use the instance.
 
@@ -104,6 +104,8 @@ def create_grid(folder_path: str = '', grid_type: str = 'single_resolution', gri
     subtile_size
         sub tile size, only used for variable resolution, the size of the subtiles within the tiles, subtiles are the
         smallest unit within the grid that is single resolution
+    is_backscatter
+        if True, this is a backscatter surface, depth layer will become "intensity" and BAG creation is disabled
 
     Returns
     -------
@@ -114,14 +116,14 @@ def create_grid(folder_path: str = '', grid_type: str = 'single_resolution', gri
     folderpath = _validate_create_options(folder_path, grid_type, grid_backend, tile_size, subtile_size)
     if grid_type == 'single_resolution':
         if grid_backend == 'numpy':
-            grid_class = SRGrid(output_folder=folderpath, tile_size=tile_size)
+            grid_class = SRGrid(output_folder=folderpath, tile_size=tile_size, is_backscatter=is_backscatter)
         else:
-            grid_class = SRGridZarr(output_folder=folderpath, tile_size=tile_size)
+            grid_class = SRGridZarr(output_folder=folderpath, tile_size=tile_size, is_backscatter=is_backscatter)
     elif grid_type == 'variable_resolution_tile':
         if grid_backend == 'numpy':
-            grid_class = VRGridTile(output_folder=folderpath, tile_size=tile_size, subtile_size=subtile_size)
+            grid_class = VRGridTile(output_folder=folderpath, tile_size=tile_size, subtile_size=subtile_size, is_backscatter=is_backscatter)
         else:
-            grid_class = VRGridTileZarr(output_folder=folderpath, tile_size=tile_size, subtile_size=subtile_size)
+            grid_class = VRGridTileZarr(output_folder=folderpath, tile_size=tile_size, subtile_size=subtile_size, is_backscatter=is_backscatter)
     else:
         raise NotImplementedError('{} is not a valid grid type'.format(grid_type))
     return grid_class
