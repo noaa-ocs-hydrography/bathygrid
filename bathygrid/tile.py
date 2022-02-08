@@ -1,4 +1,6 @@
 import numpy as np
+from dask.array import Array as darray
+
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
 from bathygrid.algorithms import np_grid_mean, np_grid_shoalest, calculate_slopes
@@ -68,6 +70,30 @@ class SRTile(Tile):
             first_key = list(self.cells[rez].keys())[0]
             final_count[rez] = int(np.count_nonzero(~np.isnan(self.cells[rez][first_key])))
         return final_count
+
+    @property
+    def density_count(self):
+        density_count = []
+        for rez in self.cells:
+            if 'density' not in self.cells[rez]:
+                raise ValueError(f'No density layer found for Tile {self.name}')
+            density = self.cells[rez]['density']
+            if isinstance(density, darray):
+                density = density.compute()
+            density_count.extend(density[density > 0].tolist())
+        return density_count
+
+    @property
+    def density_per_meter(self):
+        density_per_meter = []
+        for rez in self.cells:
+            if 'density' not in self.cells[rez]:
+                raise ValueError(f'No density layer found for Tile {self.name}')
+            density = self.cells[rez]['density']
+            if isinstance(density, darray):
+                density = density.compute()
+            density_per_meter.extend((density[density > 0] / rez).tolist())
+        return density_per_meter
 
     def _calculate_resolution_lookup(self):
         """
@@ -580,6 +606,38 @@ class SRTile(Tile):
         if not np.isnan(nodatavalue):  # if nodatavalue is not NaN, we need to replace it with the nodatavalue
             data[np.isnan(data)] = nodatavalue
         return data
+
+    def return_layer_values(self, layer: str):
+        """
+        Return a 1d array of all values in the provided layer name, excluding nodatavalues.
+
+        Parameters
+        ----------
+        layer
+
+        Returns
+        -------
+        list
+            list of all values in the grid across all resolutions, excluding nodatavalues
+        """
+        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty']:
+            # ensure nodatavalue is a float32
+            nodatavalue = np.float32(np.nan)
+        elif layer == 'density':
+            nodatavalue = 0
+        else:
+            raise ValueError("Bathygrid: return_layer_values - only 'depth', 'density', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty' currently supported")
+        layer_values = []
+        for rez in self.cells:
+            if layer in self.cells[rez]:
+                lvalues = self.cells[rez][layer]
+                if isinstance(lvalues, darray):
+                    lvalues = lvalues.compute()
+                if np.isnan(nodatavalue):
+                    layer_values.extend(lvalues[~np.isnan(lvalues)].tolist())
+                else:
+                    layer_values.extend(lvalues[lvalues != nodatavalue].tolist())
+        return layer_values
 
 
 class VRTile(Tile):

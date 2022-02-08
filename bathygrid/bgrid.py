@@ -150,6 +150,34 @@ class BathyGrid(BaseGrid):
         return final_count
 
     @property
+    def density_count(self):
+        """
+        Return the density per cell in all populated cells as a one dimensional list of counts, cells being the gridded
+        values in each tile.
+        """
+
+        density_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    density_values.extend(tile.density_count)
+        return np.array(density_values)
+
+    @property
+    def density_per_meter(self):
+        """
+        Return the density per cell per meter in all populated cells as a one dimensional list of counts, cells being the gridded
+        values in each tile.
+        """
+
+        density_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    density_values.extend(tile.density_per_meter)
+        return np.array(density_values)
+
+    @property
     def coverage_area(self):
         """
         Return the coverage area of this grid in the same units as the resolution (generally meters)
@@ -1305,6 +1333,27 @@ class BathyGrid(BaseGrid):
                 else:
                     layer_values = surfs[0][np.array(digitized_y), np.array(digitized_x)]
         return layer_values
+
+    def return_layer_values(self, layer: str):
+        """
+        Return a 1d array of all values in the provided layer name, excluding nodatavalues.
+
+        Parameters
+        ----------
+        layer
+
+        Returns
+        -------
+        np.ndarray
+            array of all values in the grid across all resolutions, excluding nodatavalues
+        """
+
+        layer_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    layer_values.extend(tile.return_layer_values(layer))
+        return np.array(layer_values)
 
     def return_unique_containers(self):
         """
