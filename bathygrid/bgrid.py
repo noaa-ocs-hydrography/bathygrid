@@ -82,6 +82,22 @@ class BathyGrid(BaseGrid):
         return output
 
     @property
+    def depth_key(self):
+        """
+        Return the string identifier for the layer that represents the z value in the bathygrid
+
+        Returns
+        -------
+        str
+            layer name for z value
+        """
+
+        if self.is_backscatter:
+            return 'intensity'
+        else:
+            return 'depth'
+
+    @property
     def no_grid(self):
         """
         Simple check to see if this instance contains gridded data or not.  Looks for the first existing Tile and checks
@@ -1227,6 +1243,68 @@ class BathyGrid(BaseGrid):
         plt.xlabel('Soundings per Square Meter')
         plt.ylabel('Number of Cells')
         plt.title(f'Density Histogram (bins={number_of_bins})')
+
+    def plot_z_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the depth or intensity (intensity if is_backscatter) across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        dkey = self.depth_key
+        if dkey in self.layer_names:
+            dvals = self.return_layer_values(dkey)
+            plt.hist(dvals, number_of_bins)
+            plt.ylabel('Number of Cells')
+            if self.is_backscatter:
+                plt.xlabel('Intensity (dB)')
+                plt.title(f'Intensity Histogram (bins={number_of_bins})')
+            else:
+                plt.xlabel('Depth (meters)')
+                plt.title(f'Depth Histogram (bins={number_of_bins})')
+        else:
+            print(f'{dkey} not found')
+
+    def plot_vertical_uncertainty_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the vertical uncertainty across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        if 'vertical_uncertainty' in self.layer_names:
+            vunc = self.return_layer_values('vertical_uncertainty')
+            plt.hist(vunc, number_of_bins)
+            plt.xlabel('Vertical Uncertainty (2 sigma, meters)')
+            plt.ylabel('Number of Cells')
+            plt.title(f'Vertical Uncertainty Histogram (bins={number_of_bins})')
+        else:
+            print('Vertical Uncertainty not found')
+
+    def plot_horizontal_uncertainty_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the horizontal uncertainty across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        if 'horizontal_uncertainty' in self.layer_names:
+            hunc = self.return_layer_values('horizontal_uncertainty')
+            plt.hist(hunc, number_of_bins)
+            plt.xlabel('Horizontal Uncertainty (meters)')
+            plt.ylabel('Number of Cells')
+            plt.title(f'Horizontal Uncertainty Histogram (bins={number_of_bins})')
+        else:
+            print('Vertical Uncertainty not found')
 
     def plot_density_vs_depth(self, number_of_bins: int = 50):
         """
