@@ -1,24 +1,26 @@
 import os
+import time
+
 import numpy as np
 import json
 import dask.array as da
 
-from bathygrid.bgrid import BathyGrid
+from bathygrid.bgrid import OperationalGrid
 from bathygrid.tile import Tile, SRTile
 from bathygrid.utilities import print_progress_bar, remove_with_permissionserror
 from bathygrid.grid_variables import bathygrid_desired_keys, bathygrid_float_to_str, bathygrid_numpy_to_list, \
     tile_desired_keys, tile_float_to_str
 
 
-class BaseStorage(BathyGrid):
+class BaseStorage(OperationalGrid):
     """
     Base class for handling saving/loading from disk.  Uses json for saving metadata to file.  Inherit this class
     to create a storage backend for the point/grid data.
     """
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
-                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = ''):
+                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = '', is_backscatter: bool = False):
         super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
-                         set_extents_manually=set_extents_manually, output_folder=output_folder)
+                         set_extents_manually=set_extents_manually, output_folder=output_folder, is_backscatter=is_backscatter)
 
     def _save_bathygrid_metadata(self, folderpath: str):
         """
@@ -219,9 +221,13 @@ class BaseStorage(BathyGrid):
         Parameters
         ----------
         tile
-            tile object that needs it's metdata loaded
+            tile object that needs to be saved
         flat_index
             1d index of the flattened tiles
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if self.output_folder:
@@ -286,6 +292,10 @@ class BaseStorage(BathyGrid):
         ----------
         flat_index
             1d index of the flattened tiles
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if self.output_folder:
@@ -324,6 +334,8 @@ class BaseStorage(BathyGrid):
                 root_folder = os.path.join(self.output_folder, self.name)
                 if self.storage_type == 'numpy':
                     storage_cls = NumpyGrid
+                elif self.storage_type == 'zarr':
+                    storage_cls = ZarrGrid
                 else:
                     raise NotImplementedError('{} is not a valid storage type'.format(self.storage_type))
                 for idx in range(self.tiles.size):
@@ -345,9 +357,9 @@ class NumpyGrid(BaseStorage):
     """
 
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
-                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = ''):
+                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = '', is_backscatter: bool = False):
         super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
-                         set_extents_manually=set_extents_manually, output_folder=output_folder)
+                         set_extents_manually=set_extents_manually, output_folder=output_folder, is_backscatter=is_backscatter)
         self.storage_type = 'numpy'
 
     def _numpygrid_todask(self, arr):
@@ -368,17 +380,29 @@ class NumpyGrid(BaseStorage):
     def _save_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         """
         Convert the arrays to dask and save them as stacked numpy arrays
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        folderpath
+            folderpath for the root of the tile data on disk
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if not only_grid:
             self._save_array(folderpath + '/data', tile.data)
         if not only_points:
             for resolution in tile.cells.keys():
-                self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
-                try:  # added in bathygrid 1.1.0
+                if 'depth' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
+                if 'intensity' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_intensity'.format(resolution), tile.cells[resolution]['intensity'])
+                if 'density' in tile.cells[resolution]:  # added in bathygrid 1.1.0
                     self._save_array(folderpath + '/cells_{}_density'.format(resolution), tile.cells[resolution]['density'])
-                except:
-                    pass
                 if 'vertical_uncertainty' in tile.cells[resolution]:
                     self._save_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), tile.cells[resolution]['vertical_uncertainty'])
                 if 'horizontal_uncertainty' in tile.cells[resolution]:
@@ -392,6 +416,17 @@ class NumpyGrid(BaseStorage):
     def _load_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
         """
         lazy load from the saved tile arrays into dask arrays and populate the tile attributes.
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        folderpath
+            folderpath for the root of the tile data on disk
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         resolutions = []
@@ -408,11 +443,12 @@ class NumpyGrid(BaseStorage):
         if not only_points:
             for resolution in resolutions:
                 tile.cells[resolution] = {}
-                tile.cells[resolution]['depth'] = self._load_array(folderpath + '/cells_{}_depth'.format(resolution))
-                try:  # added in bathygrid 1.1.0
+                if os.path.exists(folderpath + '/cells_{}_depth'.format(resolution)):
+                    tile.cells[resolution]['depth'] = self._load_array(folderpath + '/cells_{}_depth'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_intensity'.format(resolution)):
+                    tile.cells[resolution]['intensity'] = self._load_array(folderpath + '/cells_{}_intensity'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_density'.format(resolution)):  # added in bathygrid 1.1.0
                     tile.cells[resolution]['density'] = self._load_array(folderpath + '/cells_{}_density'.format(resolution))
-                except:
-                    pass
                 if os.path.exists(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution)):
                     tile.cells[resolution]['vertical_uncertainty'] = self._load_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
@@ -431,6 +467,184 @@ class NumpyGrid(BaseStorage):
 
         With Numpy memmap, this is a bit weird.  You have to call del to break the link and then replace the reference.
         See below.
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
+        """
+
+        if not only_grid and tile.data is not None:
+            tmpdata = np.array(tile.data)
+            del tile.data
+            tile.data = tmpdata
+        if not only_points and tile.cells:
+            cell_resolutions = list(tile.cells.keys())
+            for resolution in cell_resolutions:
+                reload_layers = list(tile.cells[resolution].keys())
+                for lyrname in reload_layers:
+                    tmpdata = np.array(tile.cells[resolution][lyrname])
+                    del tile.cells[resolution][lyrname]
+                    tile.cells[resolution][lyrname] = tmpdata
+                tmpdata = np.array(tile.cell_edges_x[resolution])
+                del tile.cell_edges_x[resolution]
+                tile.cell_edges_x[resolution] = tmpdata
+                tmpdata = np.array(tile.cell_edges_y[resolution])
+                del tile.cell_edges_y[resolution]
+                tile.cell_edges_y[resolution] = tmpdata
+        if tile.cell_indices:
+            cellidx_resolutions = list(tile.cell_indices.keys())
+            for resolution in cellidx_resolutions:
+                tmpdata = np.array(tile.cell_indices[resolution])
+                del tile.cell_indices[resolution]
+                tile.cell_indices[resolution] = tmpdata
+
+
+class ZarrGrid(BaseStorage):
+    """
+    Backend for saving the point data / gridded data to zarr chunked files.  Advantage of zarr over dask/numpy methods is
+    compression, should see some space savings with this class.
+    """
+
+    def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
+                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = '', is_backscatter: bool = False):
+        super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size,
+                         set_extents_manually=set_extents_manually, output_folder=output_folder, is_backscatter=is_backscatter)
+        self.storage_type = 'zarr'
+
+    def _zarrgrid_todask(self, arr):
+        if not isinstance(arr, da.Array):
+            if arr is not None:
+                return da.from_array(arr)
+            else:
+                # numpy allows you to save an empty array, that does not seem to be possible with zarr
+                return 'empty'
+        elif arr.size == 0:
+            # same case here, no empty arrays allowed
+            return 'empty'
+        return arr
+
+    def _save_array(self, arr_path: str, arr: np.ndarray):
+        remove_with_permissionserror(arr_path)
+        data = self._zarrgrid_todask(arr)
+        if isinstance(data, str):
+            if data != 'empty':
+                raise ValueError(f'Bathygrid zarr backend received str data for "empty" workflow, but str was {data}')
+            os.makedirs(arr_path)
+            open(os.path.join(arr_path, 'zarr_backend_empty'), 'wb').close()
+        else:
+            da.to_zarr(data, arr_path)
+
+    def _load_array(self, arr_path: str):
+        if os.path.exists(os.path.join(arr_path, 'zarr_backend_empty')):
+            data = da.from_array(np.array([]))
+        else:
+            data = da.from_zarr(arr_path)
+        return data
+
+    def _save_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
+        """
+        Convert the arrays to dask and save them as stacked numpy arrays
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        folderpath
+            folderpath for the root of the tile data on disk
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
+        """
+
+        if not only_grid:
+            self._save_array(folderpath + '/data', tile.data)
+        if not only_points:
+            for resolution in tile.cells.keys():
+                if 'depth' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
+                if 'intensity' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_intensity'.format(resolution), tile.cells[resolution]['intensity'])
+                if 'density' in tile.cells[resolution]:  # added in bathygrid 1.1.0
+                    self._save_array(folderpath + '/cells_{}_density'.format(resolution), tile.cells[resolution]['density'])
+                if 'vertical_uncertainty' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), tile.cells[resolution]['vertical_uncertainty'])
+                if 'horizontal_uncertainty' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), tile.cells[resolution]['horizontal_uncertainty'])
+                self._save_array(folderpath + '/cell_edges_x_{}'.format(resolution), tile.cell_edges_x[resolution])
+                self._save_array(folderpath + '/cell_edges_y_{}'.format(resolution), tile.cell_edges_y[resolution])
+        # both require saving the indices, which are updated on adding/removing points and when gridding
+        for resolution in tile.cell_indices.keys():
+            self._save_array(folderpath + '/cell_{}_indices'.format(resolution), tile.cell_indices[resolution])
+
+    def _load_tile_data(self, tile: Tile, folderpath: str, only_points: bool = False, only_grid: bool = False):
+        """
+        lazy load from the saved tile arrays into dask arrays and populate the tile attributes.
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        folderpath
+            folderpath for the root of the tile data on disk
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
+        """
+
+        resolutions = []
+        data_folders = os.listdir(folderpath)
+        for df in data_folders:
+            sections = df.split('_')
+            if sections[0] == 'cells':
+                res = float(sections[1])
+                if res not in resolutions:
+                    resolutions.append(res)
+        resolutions.sort()
+        if not only_grid:
+            tile.data = self._load_array(folderpath + '/data')
+        if not only_points:
+            for resolution in resolutions:
+                tile.cells[resolution] = {}
+                if os.path.exists(folderpath + '/cells_{}_depth'.format(resolution)):
+                    tile.cells[resolution]['depth'] = self._load_array(folderpath + '/cells_{}_depth'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_intensity'.format(resolution)):
+                    tile.cells[resolution]['intensity'] = self._load_array(folderpath + '/cells_{}_intensity'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_density'.format(resolution)):  # added in bathygrid 1.1.0
+                    tile.cells[resolution]['density'] = self._load_array(folderpath + '/cells_{}_density'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution)):
+                    tile.cells[resolution]['vertical_uncertainty'] = self._load_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
+                    tile.cells[resolution]['horizontal_uncertainty'] = self._load_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
+                tile.cell_edges_x[resolution] = self._load_array(folderpath + '/cell_edges_x_{}'.format(resolution))
+                tile.cell_edges_y[resolution] = self._load_array(folderpath + '/cell_edges_y_{}'.format(resolution))
+        for resolution in resolutions:
+            tile.cell_indices[resolution] = self._load_array(folderpath + '/cell_{}_indices'.format(resolution))
+
+    def _load_tile_data_to_memory(self, tile: Tile, only_points: bool = False, only_grid: bool = False):
+        """
+        Expects you to have run _load_tile_data already.  This is the next step that loads it into memory.
+
+        Pull the tile data into memory, allowing the data to be worked on efficiently, and to break the link between data
+        and file on disk.  This allows you to delete the data on disk and retain the data in memory.
+
+        With Numpy memmap, this is a bit weird.  You have to call del to break the link and then replace the reference.
+        See below.
+
+        Parameters
+        ----------
+        tile
+            tile object that we want to interact with
+        only_points
+            if True, will only save/reload the data array (the soundings) to disk and will skip saving/reloading the grid arrays
+        only_grid
+            if True, will only save/reload the grid arrays (the soundings) to disk and will skip saving/reloading the data array
         """
 
         if not only_grid and tile.data is not None:

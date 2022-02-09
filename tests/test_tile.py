@@ -219,3 +219,43 @@ def test_resolution_by_densityv2():
         assert False
     except ValueError:
         assert True
+
+
+def test_density():
+    til = SRTile(0.0, 0.0, 1024)
+    til.add_points(smalldata, 'test1')
+    til.grid('mean', 128.0)
+    expected_density_count = [4, 2, 2, 4, 2, 2, 2, 2, 2, 1, 1, 2, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 4, 2, 2, 4, 2,
+                              2, 2, 2, 2, 1, 1, 2, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 1, 2, 1,
+                              1, 2, 1, 1, 1, 1]
+    expected_density_permeter = [0.000244, 0.000122, 0.000122, 0.000244, 0.000122, 0.000122, 0.000122, 0.000122,
+                                 0.000122, 6.1e-05, 6.1e-05, 0.000122, 6.1e-05, 6.1e-05, 6.1e-05, 6.1e-05, 0.000122,
+                                 6.1e-05, 6.1e-05, 0.000122, 6.1e-05, 6.1e-05, 6.1e-05, 6.1e-05, 0.000244, 0.000122,
+                                 0.000122, 0.000244, 0.000122, 0.000122, 0.000122, 0.000122, 0.000122, 6.1e-05, 6.1e-05,
+                                 0.000122, 6.1e-05, 6.1e-05, 6.1e-05, 6.1e-05, 0.000122, 6.1e-05, 6.1e-05, 0.000122,
+                                 6.1e-05, 6.1e-05, 6.1e-05, 6.1e-05, 0.000122, 6.1e-05, 6.1e-05, 0.000122, 6.1e-05,
+                                 6.1e-05, 6.1e-05, 6.1e-05, 0.000122, 6.1e-05, 6.1e-05, 0.000122, 6.1e-05, 6.1e-05,
+                                 6.1e-05, 6.1e-05]
+    expected_depth_after_formatting = [20.556, 20.707, 20.808, 20.96, 21.111, 21.212, 21.313, 21.414, 22.071, 22.222,
+                                       22.323, 22.475, 22.626, 22.727, 22.828, 22.929, 23.081, 23.232, 23.333, 23.485,
+                                       23.636, 23.737, 23.838, 23.939, 24.596, 24.747, 24.848, 25.0, 25.152, 25.253,
+                                       25.354, 25.455, 26.111, 26.263, 26.364, 26.515, 26.667, 26.768, 26.869, 26.97,
+                                       27.121, 27.273, 27.374, 27.525, 27.677, 27.778, 27.879, 27.98, 28.131, 28.283,
+                                       28.384, 28.535, 28.687, 28.788, 28.889, 28.99, 29.141, 29.293, 29.394, 29.545,
+                                       29.697, 29.798, 29.899, 30.0]
+    assert til.density_count == expected_density_count
+    assert np.array(til.density_per_square_meter).round(6).tolist() == expected_density_permeter
+    count, depth = til.density_count_vs_depth
+    assert count == expected_density_count
+    assert np.round(np.array(depth), 3).tolist() == expected_depth_after_formatting
+    permeter, depth = til.density_per_square_meter_vs_depth
+    assert np.array(permeter).round(6).tolist() == expected_density_permeter
+    assert np.round(np.array(depth), 3).tolist() == expected_depth_after_formatting
+
+
+def test_coverage_area():
+    til = SRTile(0.0, 0.0, 1024)
+    til.add_points(smalldata, 'test1')
+    til.grid('mean', 128.0)
+    assert til.coverage_area_square_meters == til.width * til.height
+    assert round(til.coverage_area_square_nm, 3) == 0.305

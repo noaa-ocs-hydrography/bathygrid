@@ -90,6 +90,7 @@ x = x.ravel()
 y = y.ravel()
 z = np.linspace(5, 30, num=x.size).astype(np.float32)
 
+dtyp = [('x', np.float64), ('y', np.float64), ('z', np.float32)]
 onlyzdata = np.empty(len(x), dtype=dtyp)
 onlyzdata['x'] = x
 onlyzdata['y'] = y

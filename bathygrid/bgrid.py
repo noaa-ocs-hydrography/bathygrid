@@ -1,16 +1,21 @@
-import numpy as np
-import xarray as xr
-from dask.array import Array
+import os
 from dask.distributed import wait, progress
 import matplotlib.pyplot as plt
-from typing import Union
+from xml.etree import ElementTree as et
+from xml.dom import minidom
+import numpy as np
+from dask.array import Array
+import xarray as xr
 from datetime import datetime
+import h5py
+from pyproj import CRS
+from typing import Union
 
 from bathygrid.grids import BaseGrid
 from bathygrid.tile import SRTile, Tile
 from bathygrid.utilities import bin2d_with_indices, dask_find_or_start_client, print_progress_bar, \
-    utc_seconds_to_formatted_string, formatted_string_to_utc_seconds
-from bathygrid.grid_variables import depth_resolution_lookup, maximum_chunk_dimension
+    utc_seconds_to_formatted_string, formatted_string_to_utc_seconds, create_folder, gdal_raster_create, return_gdal_version
+from bathygrid.grid_variables import depth_resolution_lookup, maximum_chunk_dimension, sr_grid_root_names
 from bathygrid.__version__ import __version__ as bathyvers
 
 
@@ -24,7 +29,7 @@ class BathyGrid(BaseGrid):
     """
 
     def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0, tile_size: float = 1024.0,
-                 set_extents_manually: bool = False, output_folder: str = ''):
+                 set_extents_manually: bool = False, output_folder: str = '', is_backscatter: bool = False):
         super().__init__(min_x=min_x, min_y=min_y, tile_size=tile_size)
 
         if set_extents_manually:
@@ -33,6 +38,7 @@ class BathyGrid(BaseGrid):
             self.max_x = max_x
             self.max_y = max_y
 
+        self.is_backscatter = is_backscatter
         self.mean_depth = 0.0
 
         self.epsg = None  # epsg code
@@ -56,7 +62,11 @@ class BathyGrid(BaseGrid):
         output = 'Bathygrid Version: {}\n'.format(self.version)
         output += 'Resolutions (meters): {}\n'.format(self.resolutions)
         output += 'Containers: {}\n'.format('\n'.join(list(self.container.keys())))
-        output += 'Mean Depth: {}\n'.format(self.mean_depth)
+        output += 'Backscatter Mosaic: {}\n'.format(self.is_backscatter)
+        if not self.is_backscatter:
+            output += 'Mean Depth: {}\n'.format(self.mean_depth)
+        else:
+            output += 'Mean Intensity: {}\n'.format(self.mean_depth)
         try:
             output += 'Minimum Northing: {} '.format(self.min_y)
             output += 'Maximum Northing: {}\n'.format(self.max_y)
@@ -70,6 +80,22 @@ class BathyGrid(BaseGrid):
             output += 'Minimum Easting: Unknown '
             output += 'Maximum Easting: Unknown\n'
         return output
+
+    @property
+    def depth_key(self):
+        """
+        Return the string identifier for the layer that represents the z value in the bathygrid
+
+        Returns
+        -------
+        str
+            layer name for z value
+        """
+
+        if self.is_backscatter:
+            return 'intensity'
+        else:
+            return 'depth'
 
     @property
     def no_grid(self):
@@ -103,6 +129,7 @@ class BathyGrid(BaseGrid):
         BathyGrids can either contain more BathyGrids or contain Tiles with point/gridded data.  This check determines
         whether or not this instance contains Tiles
         """
+
         if self.tiles is not None:
             for tile in self.tiles.flat:
                 if tile:
@@ -115,6 +142,7 @@ class BathyGrid(BaseGrid):
         """
         Get the existing layer names in the tiles by checking the first real tile
         """
+
         if self.tiles is not None:
             for tile in self.tiles.flat:
                 if tile:
@@ -127,6 +155,7 @@ class BathyGrid(BaseGrid):
         """
         Return the total cell count for each resolution, cells being the gridded values in each tile.
         """
+
         final_count = {}
         if self.tiles is not None:
             for tile in self.tiles.flat:
@@ -140,14 +169,89 @@ class BathyGrid(BaseGrid):
         return final_count
 
     @property
-    def coverage_area(self):
+    def density_count(self):
         """
-        Return the coverage area of this grid in the same units as the resolution (generally meters)
+        Return the number of soundings per cell in all populated cells as a one dimensional list of counts, cells being
+        the gridded values in each tile.
         """
-        cellcount = self.cell_count
-        area = 0
-        for rez, cnt in cellcount.items():
-            area += cnt * rez
+
+        density_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    density_values.extend(tile.density_count)
+        return density_values
+
+    @property
+    def density_per_square_meter(self):
+        """
+        Return the density per cell per square meter in all populated cells as a one dimensional list of counts, cells
+        being the gridded values in each tile.
+        """
+
+        density_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    density_values.extend(tile.density_per_square_meter)
+        return density_values
+
+    @property
+    def density_count_vs_depth(self):
+        """
+        Return the number of soundings per cell and the depth value of the cell in all populated cells, as two lists
+        """
+
+        density_values = []
+        depth_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    density, depth = tile.density_count_vs_depth
+                    density_values.extend(density)
+                    depth_values.extend(depth)
+        return density_values, depth_values
+
+    @property
+    def density_per_square_meter_vs_depth(self):
+        """
+        Return the density per cell per square meter and the depth value of the cell in all populated cells, as two lists
+        """
+
+        density_values = []
+        depth_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    density, depth = tile.density_per_square_meter_vs_depth
+                    density_values.extend(density)
+                    depth_values.extend(depth)
+        return density_values, depth_values
+
+    @property
+    def coverage_area_square_meters(self):
+        """
+        Return the coverage area of this grid in square meters
+        """
+
+        area = 0.0
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    area += tile.coverage_area_square_meters
+        return area
+
+    @property
+    def coverage_area_square_nm(self):
+        """
+        Return the coverage area of this grid in square nautical miles
+        """
+
+        area = 0.0
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    area += tile.coverage_area_square_nm
         return area
 
     @property
@@ -155,6 +259,7 @@ class BathyGrid(BaseGrid):
         """
         Return True if any of the tiles in this grid have a point_count_changed (which is set when points are added/removed)
         """
+
         if self.tiles is not None:
             for tile in self.tiles.flat:
                 if tile:
@@ -305,7 +410,7 @@ class BathyGrid(BaseGrid):
             empty SRTile for this origin / tile size
         """
 
-        return SRTile(tile_x_origin, tile_y_origin, self.tile_size)
+        return SRTile(tile_x_origin, tile_y_origin, self.tile_size, self.is_backscatter)
 
     def _build_empty_tile_space(self):
         """
@@ -322,9 +427,13 @@ class BathyGrid(BaseGrid):
         ----------
         resolution
             float resolution that we want to use to build the grid
+        layername
+            select layername to use for building the grid
+        nodatavalue
+            fill layer grid with nodatavalue where there is no data
         """
 
-        if layername in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']:
+        if layername in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(nodatavalue)
         elif layername == 'density':
@@ -481,6 +590,7 @@ class BathyGrid(BaseGrid):
                 if flat_tiles[ul].is_empty:
                     flat_tiles[ul] = None
                 if self.sub_type in ['srtile', 'quadtile']:
+                    # just save and reload the points
                     self._save_tile(flat_tiles[ul], ul, only_points=True)
                     self._load_tile(ul, only_points=True)
             self.number_of_tiles = np.count_nonzero(self.tiles != None)
@@ -569,6 +679,7 @@ class BathyGrid(BaseGrid):
                         if tile.is_empty:
                             self._remove_tile(cnt)
                     if self.sub_type in ['srtile', 'quadtile']:
+                        # just save and reload the points
                         self._save_tile(flat_tiles[cnt], cnt, only_points=True)
                         self._load_tile(cnt, only_points=True)
             if self.is_empty:
@@ -664,7 +775,7 @@ class BathyGrid(BaseGrid):
         """
         With get_chunks_of_tiles, we build a small grid/geotransform from many tiles until we hit the maximum chunk width.
         Here we take those tiles and build the small grid.            
-    
+
         Parameters
         ----------
         column_indices
@@ -692,7 +803,7 @@ class BathyGrid(BaseGrid):
         minrow = min(row_indices)
         curdrow = [row - minrow for row in row_indices]
         for lyr in layers:
-            if lyr in ['depth', 'vertical_uncertainty', 'horizontal_uncertainty']:
+            if lyr in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty']:
                 # ensure nodatavalue is a float32
                 nodatavalue = np.float32(nodatavalue)
             elif lyr == 'density':
@@ -708,7 +819,7 @@ class BathyGrid(BaseGrid):
             if for_gdal:
                 finaldata[lyr] = np.fliplr(finaldata[lyr].T)
         return finaldata
-    
+
     def get_chunks_of_tiles(self, resolution: float = None, layer: Union[str, list] = 'depth',
                             nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False,
                             override_maximum_chunk_dimension: float = None, for_gdal: bool = True):
@@ -913,7 +1024,7 @@ class BathyGrid(BaseGrid):
                         continue
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
-                elif isinstance(tile, SRTile) and auto_resolution and self.name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
+                elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
                 else:
                     rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
@@ -923,6 +1034,7 @@ class BathyGrid(BaseGrid):
                     if rz not in self.resolutions:
                         self.resolutions.append(rz)
             if self.sub_type in ['srtile', 'quadtile']:
+                # just save and reload the gridded data
                 self._save_tile(tile, cnt, only_grid=True)
                 self._load_tile(cnt, only_grid=True)
         self.resolutions = np.sort(np.unique(self.resolutions)).tolist()
@@ -944,6 +1056,7 @@ class BathyGrid(BaseGrid):
         for result_tile, tidx in zip(tiles, tile_indices):
             self.tiles.flat[tidx] = result_tile
             if self.sub_type in ['srtile', 'quadtile']:
+                # just save and reload the gridded data
                 self._save_tile(result_tile, tidx, only_grid=True)
                 self._load_tile(tidx, only_grid=True)
         for rez in resolutions:
@@ -1099,6 +1212,140 @@ class BathyGrid(BaseGrid):
             plt.pcolormesh(lon2d, lat2d, data_m.T)
         plt.title('{}'.format(layer))
 
+    def plot_density_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the soundings per cell across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        density = np.array(self.density_count)
+        plt.hist(density, number_of_bins)
+        plt.xlabel('Soundings per Cell')
+        plt.ylabel('Number of Cells')
+        plt.title(f'Density Histogram (bins={number_of_bins})')
+
+    def plot_density_per_square_meter_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the soundings per square meter across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        density = np.array(self.density_per_square_meter)
+        plt.hist(density, number_of_bins)
+        plt.xlabel('Soundings per Square Meter')
+        plt.ylabel('Number of Cells')
+        plt.title(f'Density Histogram (bins={number_of_bins})')
+
+    def plot_z_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the depth or intensity (intensity if is_backscatter) across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        dkey = self.depth_key
+        if dkey in self.layer_names:
+            dvals = self.return_layer_values(dkey)
+            plt.hist(dvals, number_of_bins)
+            plt.ylabel('Number of Cells')
+            if self.is_backscatter:
+                plt.xlabel('Intensity (dB)')
+                plt.title(f'Intensity Histogram (bins={number_of_bins})')
+            else:
+                plt.xlabel('Depth (meters)')
+                plt.title(f'Depth Histogram (bins={number_of_bins})')
+        else:
+            print(f'{dkey} not found')
+
+    def plot_vertical_uncertainty_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the vertical uncertainty across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        if 'vertical_uncertainty' in self.layer_names:
+            vunc = self.return_layer_values('vertical_uncertainty')
+            plt.hist(vunc, number_of_bins)
+            plt.xlabel('Vertical Uncertainty (2 sigma, meters)')
+            plt.ylabel('Number of Cells')
+            plt.title(f'Vertical Uncertainty Histogram (bins={number_of_bins})')
+        else:
+            print('Vertical Uncertainty not found')
+
+    def plot_horizontal_uncertainty_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the horizontal uncertainty across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        if 'horizontal_uncertainty' in self.layer_names:
+            hunc = self.return_layer_values('horizontal_uncertainty')
+            plt.hist(hunc, number_of_bins)
+            plt.xlabel('Horizontal Uncertainty (meters)')
+            plt.ylabel('Number of Cells')
+            plt.title(f'Horizontal Uncertainty Histogram (bins={number_of_bins})')
+        else:
+            print('Vertical Uncertainty not found')
+
+    def plot_density_vs_depth(self, number_of_bins: int = 50):
+        """
+        Plot the average density vs depth using the number of bins provided to sum/average the density count
+        """
+
+        density, depth = self.density_count_vs_depth
+        density, depth = np.array(density), np.array(depth)
+        mindepth, maxdepth = min(depth), max(depth)
+        bins = np.linspace(mindepth, maxdepth, number_of_bins + 1)
+        bin_indices = np.digitize(depth, bins)
+        bin_sort = np.argsort(bin_indices)
+        unique_indices, uidx, ucounts = np.unique(bin_indices[bin_sort], return_index=True, return_counts=True)
+        counts_sum = np.add.reduceat(density[bin_sort], uidx, axis=0)
+        counts_mean = counts_sum / ucounts
+
+        plt.plot(bins, counts_mean)
+        plt.xlabel('Depth (meters)')
+        plt.ylabel('Average Soundings per Cell')
+        plt.title(f'Average Density vs Depth (bins={number_of_bins})')
+
+    def plot_density_per_square_meter_vs_depth(self, number_of_bins: int = 50):
+        """
+        Plot the average density vs depth using the number of bins provided to sum/average the density per square meter
+        """
+
+        density, depth = self.density_per_square_meter_vs_depth
+        density, depth = np.array(density), np.array(depth)
+        mindepth, maxdepth = min(depth), max(depth)
+        bins = np.linspace(mindepth, maxdepth, number_of_bins + 1)
+        bin_indices = np.digitize(depth, bins)
+        bin_sort = np.argsort(bin_indices)
+        unique_indices, uidx, ucounts = np.unique(bin_indices[bin_sort], return_index=True, return_counts=True)
+        dsm_sum = np.add.reduceat(density[bin_sort], uidx, axis=0)
+        dsm_mean = dsm_sum / ucounts
+
+        plt.plot(bins, dsm_mean)
+        plt.xlabel('Depth (meters)')
+        plt.ylabel('Average Soundings per Square Meter')
+        plt.title(f'Average Density vs Depth (bins={number_of_bins})')
+
     def return_layer_names(self):
         """
         Return a list of layer names based on what layers exist in the BathyGrid instance.
@@ -1186,7 +1433,7 @@ class BathyGrid(BaseGrid):
         return x, y, surfs, new_mins, new_maxs
 
     def _validate_layer_query(self, x_loc: np.array, y_loc: np.array, layer: str = 'depth', resolution: float = None,
-                           nodatavalue: float = np.float32(np.nan)):
+                              nodatavalue: float = np.float32(np.nan)):
         """
         validate the inputs to layer_values_at_xy and return the corrected inputs
         """
@@ -1288,6 +1535,27 @@ class BathyGrid(BaseGrid):
                     layer_values = surfs[0][np.array(digitized_y), np.array(digitized_x)]
         return layer_values
 
+    def return_layer_values(self, layer: str):
+        """
+        Return a 1d array of all values in the provided layer name, excluding nodatavalues.
+
+        Parameters
+        ----------
+        layer
+
+        Returns
+        -------
+        np.ndarray
+            array of all values in the grid across all resolutions, excluding nodatavalues
+        """
+
+        layer_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    layer_values.extend(tile.return_layer_values(layer))
+        return np.array(layer_values)
+
     def return_unique_containers(self):
         """
         Containers are added to the bathygrid in chunks with indexes attached, like 'container_0', 'container_1'.  This
@@ -1323,8 +1591,452 @@ def _gridding_parallel(data_blob: list):
     tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name = data_blob
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
-    elif isinstance(tile, SRTile) and auto_resolution and grid_name != 'SRGrid_Root':  # tiles in vrgridtile can be different resolutions
+    elif isinstance(tile, SRTile) and auto_resolution and grid_name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     else:
         rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
     return rez, tile
+
+
+def _correct_for_layer_metadata(resfile: str, data: list, nodatavalue: float):
+    """
+    Gdal bag driver writes the band min/max to include the nodatavalue, we have to write the correct values ourselves,
+    should be resolved in GDAL3.3.2, see OSGeo/gdal issue #4057
+
+    Parameters
+    ----------
+    resfile
+        bag for this resolution
+    data
+        raster layers of the data, as numpy arrays
+    nodatavalue
+        nodatavalue of the layer
+    """
+
+    if os.path.exists(resfile):
+        try:
+            r5 = h5py.File(resfile, 'r+')
+            validdata = data[0] != nodatavalue
+            r5['BAG_root']['elevation'].attrs['Maximum Elevation Value'] = np.float32(np.max(data[0][validdata]))
+            r5['BAG_root']['elevation'].attrs['Minimum Elevation Value'] = np.float32(np.min(data[0][validdata]))
+            if len(data) == 2:
+                r5['BAG_root']['uncertainty'].attrs['Maximum Uncertainty Value'] = np.float32(np.max(data[1][validdata]))
+                r5['BAG_root']['uncertainty'].attrs['Minimum Uncertainty Value'] = np.float32(np.min(data[1][validdata]))
+            r5.close()
+        except:
+            print('Warning: Unable to adjust minmax for elevation and uncertainty layers, unknown h5py error')
+
+
+def _set_temporal_extents(resfile: str, start_time: Union[str, int, float, datetime], end_time: Union[str, int, float, datetime]):
+    """
+    Taken from the HSTB bag.py library.  Sets the min/max time of the BAG by shoveling in the following xml blob:
+
+      <gmd:temporalElement>
+        <gmd:EX_TemporalExtent>
+          <gmd:extent>
+            <gml:TimePeriod gml:id="temporal-extent-1" xsi:type="gml:TimePeriodType">
+              <gml:beginPosition>2018-06-29T07:20:48</gml:beginPosition>
+              <gml:endPosition>2018-07-06T21:54:43</gml:endPosition>
+            </gml:TimePeriod>
+          </gmd:extent>
+        </gmd:EX_TemporalExtent>
+      </gmd:temporalElement>
+
+    Parameters
+    ----------
+    resfile
+        bag for this resolution
+    data
+        raster layers of the data, as numpy arrays
+    nodatavalue
+        nodatavalue of the layer
+    """
+
+    if os.path.exists(resfile) and start_time and end_time:
+        try:
+            r5 = h5py.File(resfile, 'r+')
+            metadata = r5['BAG_root']['metadata'][:].tobytes().decode().replace("\x00", "")
+            xml_root = et.fromstring(metadata)
+
+            if isinstance(start_time, (float, int)):
+                start_time = datetime.utcfromtimestamp(start_time).strftime('%Y-%m-%dT%H:%M:%S')
+            elif isinstance(start_time, datetime):
+                start_time = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+            if isinstance(end_time, (float, int)):
+                end_time = datetime.utcfromtimestamp(end_time).strftime('%Y-%m-%dT%H:%M:%S')
+            elif isinstance(end_time, datetime):
+                end_time = end_time.strftime('%Y-%m-%dT%H:%M:%S')
+            gmd = '{http://www.isotc211.org/2005/gmd}'
+            gml = '{http://www.opengis.net/gml/3.2}'
+            bagschema = "{http://www.opennavsurf.org/schema/bag}"
+            xsi = '{http://www.w3.org/2001/XMLSchema-instance}'
+            et.register_namespace("gmi", "http://www.isotc211.org/2005/gmi")
+            et.register_namespace('gmd', "http://www.isotc211.org/2005/gmd")
+            et.register_namespace('xsi', "http://www.w3.org/2001/XMLSchema-instance")
+            et.register_namespace('gml', "http://www.opengis.net/gml/3.2")
+            et.register_namespace('gco', "http://www.isotc211.org/2005/gco")
+            et.register_namespace('xlink', "http://www.w3.org/1999/xlink")
+            et.register_namespace('bag', "http://www.opennavsurf.org/schema/bag")
+            temporal_hierarchy = [gmd + 'identificationInfo', bagschema + 'BAG_DataIdentification', gmd + 'extent', gmd + 'EX_Extent',
+                                  gmd + 'temporalElement', gmd + 'EX_TemporalExtent', gmd + 'extent', gml + 'TimePeriod']
+            use_gml = gml
+            temporal_root = "/".join(temporal_hierarchy)
+            begin_elem = xml_root.findall(temporal_root + "/" + use_gml + 'beginPosition')
+            end_elem = xml_root.findall(temporal_root + "/" + use_gml + 'endPosition')
+            if not begin_elem or not end_elem:
+                parent = xml_root
+                for elem in temporal_hierarchy:
+                    found = parent.findall(elem)
+                    if not found:
+                        new_elem = et.SubElement(parent, elem)
+                        if "TimePeriod" in elem:
+                            new_elem.set(use_gml + 'id', "temporal-extent-1")
+                            new_elem.set(xsi + 'type', "gml:TimePeriodType")
+                        found = [new_elem]
+                    parent = found[0]
+                if not begin_elem:
+                    begin_elem = [et.SubElement(parent, use_gml+"beginPosition")]
+                if not end_elem:
+                    end_elem = [et.SubElement(parent, use_gml+"endPosition")]
+            begin_elem[0].text = start_time
+            end_elem[0].text = end_time
+            new_metadata = et.tostring(xml_root).decode()
+            del r5['BAG_root']['metadata']
+            r5['BAG_root'].create_dataset("metadata", maxshape=(None,), data=np.array(list(new_metadata), dtype="S1"))
+            r5.close()
+        except:
+            print('Warning: Unable to add time extents to BAG, unknown h5py error')
+
+
+def _generate_caris_rxl(resfile: str, wkt_string: str):
+    """
+    Caris expects the WKT string to be written to a separate file next to the BAG.  We have the wkt string in the bag
+    metadata, but we need to write this second file to make Caris happy.  Caris expects the WKT V1 GDAL string format,
+    so we ensure that is created and passed in here
+
+    Parameters
+    ----------
+    resfile
+        path to the bag file
+    wkt_string
+        the WKT v1 GDAL string for the horizontal coordinate system of this surface
+    """
+
+    if os.path.exists(resfile) and wkt_string:
+        try:
+            rxl_path = os.path.splitext(resfile)[0] + '.bag_rxl'
+            top = et.Element('caris_registration', version="4.0", generation="USER")
+            newtree = et.ElementTree(top)
+            coord_elem = et.SubElement(top, 'coordinate_system')
+            wktelem = et.SubElement(coord_elem, 'wkt')
+            wktelem.text = wkt_string
+            xmlstr = minidom.parseString(et.tostring(top)).toprettyxml(indent="  ", encoding='utf-8').decode()
+            xmlstr = xmlstr.replace('&quot;', '"').encode('utf-8')
+            with open(rxl_path, 'wb') as rxlfile:
+                rxlfile.write(xmlstr)
+        except:
+            print('Warning: Unable to generate Caris RXL file, unknown ElementTree error')
+
+
+class OperationalGrid(BathyGrid):
+    def __init__(self, min_x: float = 0, min_y: float = 0, max_x: float = 0, max_y: float = 0,
+                 tile_size: float = 1024.0, set_extents_manually: bool = False, output_folder: str = '', is_backscatter: bool = False):
+        super().__init__(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, tile_size=tile_size, set_extents_manually=set_extents_manually,
+                         output_folder=output_folder, is_backscatter=is_backscatter)
+
+    def __repr__(self):
+        base_output = super().__repr__()
+        output = 'Time of Data (UTC): {} to {}\n'.format(self.min_time, self.max_time)
+        output += 'EPSG: {}\n'.format(self.epsg)
+        output += 'Path: {}\n'.format(self.output_folder)
+        output += base_output
+        return output
+
+    def _convert_dataset(self):
+        """
+        We currently convert xarray Dataset input into a numpy structured array.  Xarry Datasets appear to be rather
+        slow in testing, I believe because they do some stuff under the hood with matching coordinates when you do
+        basic operations.  Also, you can't do any fancy indexing with xarray Dataset, at best you can use slice with isel.
+
+        For all these reasons, we just convert to numpy.
+        """
+        allowed_vars = ['x', 'y', 'z', 'tvu', 'thu']
+        dtyp = [(varname, self.data[varname].dtype) for varname in allowed_vars if varname in self.data]
+        empty_struct = np.empty(len(self.data['x']), dtype=dtyp)
+        for varname, vartype in dtyp:
+            empty_struct[varname] = self.data[varname].values
+        self.data = empty_struct
+
+    def _validate_input_data(self):
+        """
+        Ensure you get a structured numpy array as the input dataset.  If dataset is an Xarray Dataset, we convert it to
+        Numpy for performance reasons.
+        """
+
+        if type(self.data) in [np.ndarray, Array]:
+            if not self.data.dtype.names:
+                raise ValueError('BathyGrid: numpy array provided for data, but no names were found, array must be a structured array')
+            if 'x' not in self.data.dtype.names or 'y' not in self.data.dtype.names:
+                raise ValueError('BathyGrid: numpy structured array provided for data, but "x" or "y" not found in variable names')
+        elif type(self.data) == xr.Dataset:
+            if 'x' not in self.data:
+                raise ValueError('BathyGrid: xarray Dataset provided for data, but "x" or "y" not found in variable names')
+            if self.data['z'].ndim > 1:
+                raise ValueError('BathyGrid: xarray Dataset provided for data, but found multiple dimensions, must be one dimensional: {}'.format(self.data.dims))
+            self._convert_dataset()  # internally we just convert xarray dataset to numpy for ease of use
+        else:
+            raise ValueError('QuadTree: numpy structured array or dask array with "x" and "y" as variable must be provided')
+
+    def save(self, folder_path: str = None, progress_bar: bool = True):
+        """
+        Recursive save for all BathyGrid/Tile objects within this class.
+
+        Parameters
+        ----------
+        folder_path
+            container folder for the grid
+        progress_bar
+            if True, displays a console progress bar
+        """
+
+        if not folder_path:
+            if self.output_folder:
+                super().save(self.output_folder, progress_bar=progress_bar)
+            else:
+                raise ValueError('Grid has not been saved before, you must provide a folder path to save.')
+        else:
+            fpath, fname = os.path.split(folder_path)
+            folderpath = create_folder(fpath, fname)
+            self.output_folder = folderpath
+            super().save(folderpath, progress_bar=progress_bar)
+
+    def load(self, folder_path: str = None):
+        """
+        Recursive load for all BathyGrid/Tile objects within this class.
+
+        Parameters
+        ----------
+        folder_path
+            container folder for the grid
+        """
+
+        if not folder_path:
+            if self.output_folder:
+                super().load(self.output_folder)
+            else:
+                raise ValueError('Grid has not been saved before, you must provide a folder path to load.')
+        else:
+            self.output_folder = folder_path
+            super().load(self.output_folder)
+
+    def export(self, output_path: str, export_format: str = 'csv', z_positive_up: bool = True, resolution: float = None,
+               **kwargs):
+        """
+        Export the node data to one of the supported formats
+
+        Parameters
+        ----------
+        output_path
+            filepath for exporting the dataset
+        export_format
+            format option, one of 'csv', 'geotiff', 'bag'
+        z_positive_up
+            if True, will output bands with positive up convention
+        resolution
+            if provided, will only export the given resolution
+        """
+
+        fmt = export_format.lower()
+        if os.path.exists(output_path):
+            tstmp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            foldername, filname = os.path.split(output_path)
+            filnm, filext = os.path.splitext(filname)
+            output_path = os.path.join(foldername, '{}_{}{}'.format(filnm, tstmp, filext))
+
+        if fmt == 'csv':
+            self._export_csv(output_path, z_positive_up=z_positive_up, resolution=resolution)
+        elif fmt == 'geotiff':
+            self._export_geotiff(output_path, z_positive_up=z_positive_up, resolution=resolution)
+        elif fmt == 'bag':
+            if self.is_backscatter:
+                raise ValueError('Bathygrid: Cannot generate BAG with Backscatter grid')
+            self._export_bag(output_path, resolution=resolution, **kwargs)
+        else:
+            raise ValueError("bathygrid: Unrecognized format {}, must be one of ['csv', 'geotiff', 'bag']".format(fmt))
+
+    def _export_csv(self, output_file: str, z_positive_up: bool = True, resolution: float = None):
+        """
+        Export the node data to csv
+
+        Parameters
+        ----------
+        output_file
+            output_file to contain the exported data
+        z_positive_up
+            if True, will output bands with positive up convention
+        resolution
+            if provided, will only export the given resolution
+        """
+
+        basefile, baseext = os.path.splitext(output_file)
+        if resolution is not None:
+            resolutions = [resolution]
+        else:
+            resolutions = self.resolutions
+        for res in resolutions:
+            resfile = basefile + '_{}.csv'.format(res)
+            lyrs = self.return_layer_names()
+            x, y, lyrdata, newmins, newmaxs = self.return_surf_xyz(lyrs, res, False)
+            xx, yy = np.meshgrid(x, y)
+            dataset = [xx.ravel(), yy.ravel()]
+            dnames = ['x', 'y']
+            dfmt = ['%.3f', '%.3f']
+            for cnt, lname in enumerate(lyrs):
+                if lname == 'depth' and z_positive_up:
+                    lyrdata[cnt] = lyrdata[cnt] * -1
+                    lname = 'elevation'
+                dataset += [lyrdata[cnt].ravel()]
+                dnames += [lname]
+                if lname == 'density':
+                    dfmt += ['%i']
+                else:
+                    dfmt += ['%.3f']
+            sortidx = np.argsort(dataset[0])
+            np.savetxt(resfile, np.stack([d[sortidx] for d in dataset], axis=1),
+                       fmt=dfmt, delimiter=' ', comments='',
+                       header=' '.join([nm for nm in dnames]))
+
+    def _export_geotiff(self, filepath: str, z_positive_up: bool = True, resolution: float = None):
+        """
+        Export a GDAL generated geotiff to the provided filepath
+
+        Parameters
+        ----------
+        filepath
+            folder to contain the exported data
+        z_positive_up
+            if True, will output bands with positive up convention
+        resolution
+            if provided, will only export the given resolution
+        """
+
+        lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
+                         'horizontal_uncertainty': 'Horizontal Uncertainty', 'intensity': 'Intensity'}
+        nodatavalue = 1000000.0
+        basefile, baseext = os.path.splitext(filepath)
+        if resolution is not None:
+            resolutions = [resolution]
+        else:
+            resolutions = self.resolutions
+        if self.is_backscatter:
+            layernames = ['intensity']
+        else:
+            layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty']]
+        finalnames = [lyrtranslator[lname] for lname in layernames]
+        if z_positive_up and finalnames.index('Depth') != -1:
+            finalnames[finalnames.index('Depth')] = 'Elevation'
+        for res in resolutions:
+            chunk_count = 1
+            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
+                                                                        nodatavalue=nodatavalue, z_positive_up=z_positive_up):
+                resfile = basefile + '_{}_{}.tif'.format(res, chunk_count)
+                data = list(data.values())
+                gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=finalnames, driver='GTiff')
+                chunk_count += 1
+
+    def _export_bag(self, filepath: str, resolution: float = None, individual_name: str = 'unknown',
+                    organizational_name: str = 'unknown', position_name: str = 'unknown', attr_date: str = '',
+                    vert_crs: str = '', abstract: str = '', process_step_description: str = '', attr_datetime: str = '',
+                    restriction_code: str = 'otherRestrictions', other_constraints: str = 'unknown',
+                    classification: str = 'unclassified', security_user_note: str = 'none'):
+        """
+        Export a GDAL generated BAG to the provided filepath
+
+        If attr_date is not provided, will use the current date.  If attr_datetime is not provided, will use the current
+        date/time.  If process_step_description is not provided, will use a default 'Generated By GDAL and Kluster'
+        message.  If vert_crs is not provided, will use a WKT with value = 'unknown'
+
+        Parameters
+        ----------
+        filepath
+            folder to contain the exported data
+        resolution
+            if provided, will only export the given resolution
+        """
+
+        if not attr_date:
+            attr_date = datetime.utcnow().strftime('%Y-%m-%d')
+        if not attr_datetime:
+            attr_datetime = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
+        if not process_step_description:
+            process_step_description = 'Generated By GDAL {}'.format(return_gdal_version())
+        if not vert_crs:
+            vert_crs = 'VERT_CS["unknown", VERT_DATUM["unknown", 2000]]'
+
+        bag_options = ['VAR_INDIVIDUAL_NAME=' + individual_name, 'VAR_ORGANISATION_NAME=' + organizational_name,
+                       'VAR_POSITION_NAME=' + position_name, 'VAR_DATE=' + attr_date, 'VAR_VERT_WKT=' + vert_crs,
+                       'VAR_ABSTRACT=' + abstract, 'VAR_PROCESS_STEP_DESCRIPTION=' + process_step_description,
+                       'VAR_DATETIME=' + attr_datetime, 'VAR_RESTRICTION_CODE=' + restriction_code,
+                       'VAR_OTHER_CONSTRAINTS=' + other_constraints, 'VAR_CLASSIFICATION=' + classification,
+                       'VAR_SECURITY_USER_NOTE=' + security_user_note]
+
+        lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
+                         'horizontal_uncertainty': 'Horizontal Uncertainty'}
+        nodatavalue = 1000000.0
+        z_positive_up = True
+        basefile, baseext = os.path.splitext(filepath)
+        if resolution is not None:
+            resolutions = [resolution]
+        else:
+            resolutions = self.resolutions
+        layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty']]
+        finalnames = [lyrtranslator[lname] for lname in layernames]
+        if z_positive_up and finalnames.index('Depth') != -1:
+            finalnames[finalnames.index('Depth')] = 'Elevation'
+        for res in resolutions:
+            chunk_count = 1
+            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
+                                                                        nodatavalue=nodatavalue, z_positive_up=z_positive_up):
+                resfile = basefile + '_{}_{}.bag'.format(res, chunk_count)
+                data = list(data.values())
+                gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue,
+                                   bandnames=finalnames, driver='BAG', creation_options=bag_options)
+                _correct_for_layer_metadata(resfile, data, nodatavalue)
+                _set_temporal_extents(resfile, self.min_time, self.max_time)
+                _generate_caris_rxl(resfile, CRS.from_epsg(self.epsg).to_wkt(version='WKT1_GDAL', pretty=True))
+                chunk_count += 1
+
+    def return_attribution(self):
+        """
+        Used in Kluster, return the important attribution of the class as a dict to display in the gui
+
+        Returns
+        -------
+        dict
+            class attributes in a presentable form
+        """
+
+        data = {'grid_folder': self.output_folder, 'name': self.name, 'type': type(self), 'grid_resolution': self.grid_resolution,
+                'grid_algorithm': self.grid_algorithm, 'epsg': self.epsg, 'vertical_reference': self.vertical_reference,
+                'height': self.height, 'width': self.width, 'minimum_x': self.min_x, 'maximum_x': self.max_x,
+                'minimum_y': self.min_y, 'maximum_y': self.max_y, 'minimum_time_utc': self.min_time,
+                'maximum_time_utc': self.max_time, 'tile_size': self.tile_size,
+                'subtile_size': self.subtile_size, 'tile_count': self.number_of_tiles, 'resolutions': self.resolutions,
+                'storage_type': self.storage_type}
+        ucontainers = self.return_unique_containers()
+        for cont_name in ucontainers:
+            try:  # this works for kluster added containers, that have a suffix with an index
+                data['source_{}'.format(cont_name)] = {'time': self.container_timestamp[cont_name + '_0'],
+                                                       'multibeam_lines': self.container[cont_name + '_0']}
+            except KeyError:
+                try:  # this works for all other standard container names
+                    data['source_{}'.format(cont_name)] = {'time': self.container_timestamp[cont_name],
+                                                           'multibeam_lines': self.container[cont_name]}
+                except KeyError:
+                    nearest_cont_name = [nm for nm in self.container if nm.find(cont_name) != -1]
+                    if nearest_cont_name[0]:
+                        data['source_{}'.format(nearest_cont_name[0])] = {'time': self.container_timestamp[nearest_cont_name[0]],
+                                                                          'multibeam_lines': self.container[nearest_cont_name[0]]}
+                    else:
+                        raise ValueError('Unable to find entry for container {}, if you have a suffix with a _ and a number, bathygrid will interpret that as an index starting with 0'.format(cont_name))
+        return data
