@@ -51,6 +51,15 @@ class SRTile(Tile):
 
     @property
     def depth_key(self):
+        """
+        Return the string identifier for the layer that represents the z value in the bathygrid
+
+        Returns
+        -------
+        str
+            layer name for z value
+        """
+
         if self.is_backscatter:
             return 'intensity'
         else:
@@ -58,13 +67,31 @@ class SRTile(Tile):
 
     @property
     def mean_depth(self):
+        """
+        Returns the mean z value for this grid, will be mean intensity for backscatter grid, name is a misnomer
+
+        Returns
+        -------
+        float
+            mean value for z data
+        """
+
         if self.data is None:
-            return 0
+            return 0.0
         else:
             return float(self.data['z'].mean())
 
     @property
     def cell_count(self):
+        """
+        Returns the number of cells for each resolution in the tile
+
+        Returns
+        -------
+        dict
+            dictionary of resolution values as float to number of cells as integer
+        """
+
         final_count = {}
         for rez in self.cells:
             first_key = list(self.cells[rez].keys())[0]
@@ -73,6 +100,15 @@ class SRTile(Tile):
 
     @property
     def density_count(self):
+        """
+        Returns a list of number of soundings per cell for each populated cell in the tile
+
+        Returns
+        -------
+        list
+            list of sounding counts per cell
+        """
+
         density_count = []
         for rez in self.cells:
             if 'density' not in self.cells[rez]:
@@ -84,7 +120,16 @@ class SRTile(Tile):
         return density_count
 
     @property
-    def density_per_meter(self):
+    def density_per_square_meter(self):
+        """
+        Returns a list of number of soundings / m2 per cell for each populated cell in the tile
+
+        Returns
+        -------
+        list
+            list of soundings / m2 per cell
+        """
+
         density_per_meter = []
         for rez in self.cells:
             if 'density' not in self.cells[rez]:
@@ -92,8 +137,101 @@ class SRTile(Tile):
             density = self.cells[rez]['density']
             if isinstance(density, darray):
                 density = density.compute()
-            density_per_meter.extend((density[density > 0] / rez).tolist())
+            density_per_meter.extend((density[density > 0] / (rez ** 2)).tolist())
         return density_per_meter
+
+    @property
+    def density_count_vs_depth(self):
+        """
+        Returns a tuple of (density_count, depth in meters)
+
+        Returns
+        -------
+        tuple
+            tuple of (density_count, depth in meters)
+        """
+
+        density_per_meter = []
+        depth_values = []
+        for rez in self.cells:
+            if 'density' not in self.cells[rez]:
+                raise ValueError(f'No density layer found for Tile {self.name}')
+            if 'depth' not in self.cells[rez]:
+                raise ValueError(f'No depth layer found for Tile {self.name}')
+            density = self.cells[rez]['density']
+            depth = self.cells[rez]['depth']
+            if isinstance(density, darray):
+                density = density.compute()
+            if isinstance(depth, darray):
+                depth = depth.compute()
+            msk = density > 0
+            density_per_meter.extend(density[msk].tolist())
+            depth_values.extend(depth[msk].tolist())
+        return density_per_meter, depth_values
+
+    @property
+    def density_per_square_meter_vs_depth(self):
+        """
+        Returns a tuple of (density_per_square_meter, depth in meters)
+
+        Returns
+        -------
+        tuple
+            tuple of (density_per_square_meter, depth in meters)
+        """
+
+        density_per_meter = []
+        depth_values = []
+        for rez in self.cells:
+            if 'density' not in self.cells[rez]:
+                raise ValueError(f'No density layer found for Tile {self.name}')
+            if 'depth' not in self.cells[rez]:
+                raise ValueError(f'No depth layer found for Tile {self.name}')
+            density = self.cells[rez]['density']
+            depth = self.cells[rez]['depth']
+            if isinstance(density, darray):
+                density = density.compute()
+            if isinstance(depth, darray):
+                depth = depth.compute()
+            msk = density > 0
+            density_per_meter.extend((density[density > 0] / (rez ** 2)).tolist())
+            depth_values.extend(depth[msk].tolist())
+        return density_per_meter, depth_values
+
+    @property
+    def coverage_area_square_meters(self):
+        """
+        Returns the coverage area of the tile in square meters, ommitting any unpopulated cells
+
+        Returns
+        -------
+        float
+            coverage area in square meters
+        """
+
+        area = 0.0
+        for rez in self.cells:
+            if 'density' not in self.cells[rez]:
+                raise ValueError(f'No density layer found for Tile {self.name}')
+            density = self.cells[rez]['density']
+            if isinstance(density, darray):
+                density = density.compute()
+            area += round(density[density > 0].size * (rez ** 2), 3)
+        return area
+
+    @property
+    def coverage_area_square_nm(self):
+        """
+        Returns the coverage area of the tile in square nautical miles, ommitting any unpopulated cells
+
+        Returns
+        -------
+        float
+            coverage area in square nautical miles
+        """
+
+        sqnm = round(self.coverage_area_square_meters / 3434290.012, 3)
+        return sqnm
 
     def _calculate_resolution_lookup(self):
         """
