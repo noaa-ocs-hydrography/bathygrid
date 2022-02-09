@@ -258,4 +258,4 @@ def test_coverage_area():
     til.add_points(smalldata, 'test1')
     til.grid('mean', 128.0)
     assert til.coverage_area_square_meters == til.width * til.height
-    assert til.coverage_area_square_nm == round((til.width * til.height) / 3434290.012, 3)
+    assert round(til.coverage_area_square_nm, 3) == 0.305

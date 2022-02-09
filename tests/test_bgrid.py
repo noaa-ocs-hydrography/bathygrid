@@ -4,7 +4,7 @@ from pytest import approx
 from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.tile import Tile
-from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata
+from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata, realdata
 from bathygrid.utilities import utc_seconds_to_formatted_string
 
 
@@ -372,7 +372,7 @@ def test_SRGrid_backscatter():
     assert np.array_equal(bg.resolutions, np.array([8.0]))
     assert bg.layer_names == ['intensity', 'density']
     assert bg.cell_count == {8.0: 16}
-    assert bg.coverage_area == 128.0
+    assert bg.coverage_area_square_meters == 1024.0
 
 
 def test_grid_names():
@@ -413,13 +413,13 @@ def test_only_z_data():
     bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
     assert bg.cell_count == {0.5: 16}
-    assert bg.coverage_area == 8
+    assert bg.coverage_area_square_meters == 4.0
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
     assert bg.cell_count == {0.25: 3, 0.5: 7, 1.0: 6}
-    assert bg.coverage_area == 10.25
+    assert bg.coverage_area_square_meters == 7.937
 
 
 def test_return_extents():
@@ -439,13 +439,13 @@ def test_cell_count():
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
     assert bg.cell_count == {0.5: 16}
-    assert bg.coverage_area == 8
+    assert bg.coverage_area_square_meters == 4.0
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid()
     assert bg.cell_count == {0.25: 3, 0.5: 7, 1.0: 6}
-    assert bg.coverage_area == 10.25
+    assert bg.coverage_area_square_meters == 7.937
 
 
 def test_with_dask():
@@ -454,14 +454,14 @@ def test_with_dask():
     bg.grid(use_dask=True)
     assert bg.client
     assert bg.cell_count == {0.5: 16}
-    assert bg.coverage_area == 8
+    assert bg.coverage_area_square_meters == 4.0
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(closedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
     bg.grid(use_dask=True)
     assert bg.client
     assert bg.cell_count == {0.25: 3, 0.5: 7, 1.0: 6}
-    assert bg.coverage_area == 10.25
+    assert bg.coverage_area_square_meters == 7.937
 
 
 def test_return_unique_containers():
@@ -672,3 +672,69 @@ def test_layer_values_at_xy():
     assert outofboundscheck[1:3] == approx(np.array([612.5, 2605.432]), 0.001)
     assert np.isnan(outofboundscheck[0])
     assert np.isnan(outofboundscheck[3])
+
+
+def test_density_properties():
+    bg = SRGridZarr(tile_size=16)  # small tile size just to ensure this works with multiple tiles
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    expected_len = 232
+    expected_depth_sum = 3430.543
+
+    dcount = np.array(bg.density_count)
+    assert dcount.size == expected_len
+    assert dcount.sum() == 238
+    dsm = np.array(bg.density_per_square_meter)
+    assert dsm.size == expected_len
+    assert dsm.sum() == 952.0
+    dcount, dpth = bg.density_count_vs_depth
+    dcount, dpth = np.array(dcount), np.array(dpth)
+    assert dcount.size == expected_len
+    assert dcount.sum() == 238
+    assert dpth.size == expected_len
+    assert dpth.sum().round(3) == expected_depth_sum
+    dsm, dpth = bg.density_per_square_meter_vs_depth
+    dsm, dpth = np.array(dsm), np.array(dpth)
+    assert dsm.size == expected_len
+    assert dsm.sum() == 952.0
+    assert dpth.size == expected_len
+    assert dpth.sum().round(3) == expected_depth_sum
+
+    bg = VRGridTileZarr(tile_size=16, subtile_size=16)
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    expected_len = 232
+    expected_depth_sum = 3430.543
+
+    dcount = np.array(bg.density_count)
+    assert dcount.size == expected_len
+    assert dcount.sum() == 238
+    dsm = np.array(bg.density_per_square_meter)
+    assert dsm.size == expected_len
+    assert dsm.sum() == 952.0
+    dcount, dpth = bg.density_count_vs_depth
+    dcount, dpth = np.array(dcount), np.array(dpth)
+    assert dcount.size == expected_len
+    assert dcount.sum() == 238
+    assert dpth.size == expected_len
+    assert dpth.sum().round(3) == expected_depth_sum
+    dsm, dpth = bg.density_per_square_meter_vs_depth
+    dsm, dpth = np.array(dsm), np.array(dpth)
+    assert dsm.size == expected_len
+    assert dsm.sum() == 952.0
+    assert dpth.size == expected_len
+    assert dpth.sum().round(3) == expected_depth_sum
+
+
+def test_coverage_area():
+    bg = SRGridZarr(tile_size=16)  # small tile size just to ensure this works with multiple tiles
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.coverage_area_square_meters == 58.0
+    assert round(bg.coverage_area_square_nm, 6) == .000017
+
+    bg = VRGridTileZarr(tile_size=16, subtile_size=16)
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    bg.grid()
+    assert bg.coverage_area_square_meters == 58.0
+    assert round(bg.coverage_area_square_nm, 6) == .000017

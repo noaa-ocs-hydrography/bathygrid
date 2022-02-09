@@ -113,6 +113,7 @@ class BathyGrid(BaseGrid):
         BathyGrids can either contain more BathyGrids or contain Tiles with point/gridded data.  This check determines
         whether or not this instance contains Tiles
         """
+
         if self.tiles is not None:
             for tile in self.tiles.flat:
                 if tile:
@@ -125,6 +126,7 @@ class BathyGrid(BaseGrid):
         """
         Get the existing layer names in the tiles by checking the first real tile
         """
+
         if self.tiles is not None:
             for tile in self.tiles.flat:
                 if tile:
@@ -137,6 +139,7 @@ class BathyGrid(BaseGrid):
         """
         Return the total cell count for each resolution, cells being the gridded values in each tile.
         """
+
         final_count = {}
         if self.tiles is not None:
             for tile in self.tiles.flat:
@@ -152,8 +155,8 @@ class BathyGrid(BaseGrid):
     @property
     def density_count(self):
         """
-        Return the density per cell in all populated cells as a one dimensional list of counts, cells being the gridded
-        values in each tile.
+        Return the number of soundings per cell in all populated cells as a one dimensional list of counts, cells being
+        the gridded values in each tile.
         """
 
         density_values = []
@@ -161,31 +164,78 @@ class BathyGrid(BaseGrid):
             for tile in self.tiles.flat:
                 if tile:
                     density_values.extend(tile.density_count)
-        return np.array(density_values)
+        return density_values
 
     @property
-    def density_per_meter(self):
+    def density_per_square_meter(self):
         """
-        Return the density per cell per meter in all populated cells as a one dimensional list of counts, cells being the gridded
-        values in each tile.
+        Return the density per cell per square meter in all populated cells as a one dimensional list of counts, cells
+        being the gridded values in each tile.
         """
 
         density_values = []
         if self.tiles is not None:
             for tile in self.tiles.flat:
                 if tile:
-                    density_values.extend(tile.density_per_meter)
-        return np.array(density_values)
+                    density_values.extend(tile.density_per_square_meter)
+        return density_values
 
     @property
-    def coverage_area(self):
+    def density_count_vs_depth(self):
         """
-        Return the coverage area of this grid in the same units as the resolution (generally meters)
+        Return the number of soundings per cell and the depth value of the cell in all populated cells, as two lists
         """
-        cellcount = self.cell_count
-        area = 0
-        for rez, cnt in cellcount.items():
-            area += cnt * rez
+
+        density_values = []
+        depth_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    density, depth = tile.density_count_vs_depth
+                    density_values.extend(density)
+                    depth_values.extend(depth)
+        return density_values, depth_values
+
+    @property
+    def density_per_square_meter_vs_depth(self):
+        """
+        Return the density per cell per square meter and the depth value of the cell in all populated cells, as two lists
+        """
+
+        density_values = []
+        depth_values = []
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    density, depth = tile.density_per_square_meter_vs_depth
+                    density_values.extend(density)
+                    depth_values.extend(depth)
+        return density_values, depth_values
+
+    @property
+    def coverage_area_square_meters(self):
+        """
+        Return the coverage area of this grid in square meters
+        """
+
+        area = 0.0
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    area += tile.coverage_area_square_meters
+        return area
+
+    @property
+    def coverage_area_square_nm(self):
+        """
+        Return the coverage area of this grid in square nautical miles
+        """
+
+        area = 0.0
+        if self.tiles is not None:
+            for tile in self.tiles.flat:
+                if tile:
+                    area += tile.coverage_area_square_nm
         return area
 
     @property
@@ -193,6 +243,7 @@ class BathyGrid(BaseGrid):
         """
         Return True if any of the tiles in this grid have a point_count_changed (which is set when points are added/removed)
         """
+
         if self.tiles is not None:
             for tile in self.tiles.flat:
                 if tile:
@@ -1144,6 +1195,60 @@ class BathyGrid(BaseGrid):
             data_m = np.ma.array(lyrdata[0], mask=np.isnan(lyrdata[0]))
             plt.pcolormesh(lon2d, lat2d, data_m.T)
         plt.title('{}'.format(layer))
+
+    def plot_density_histogram(self, number_of_bins: int = 10):
+        """
+        Build histogram plot of the soundings per cell across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        density = np.array(self.density_count)
+        plt.hist(density, number_of_bins)
+        plt.ylabel('Soundings per Cell')
+        plt.title('Density Histogram')
+
+    def plot_density_per_square_meter_histogram(self, number_of_bins: int = 10):
+        """
+        Build histogram plot of the soundings per square meter across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        density = np.array(self.density_per_square_meter)
+        plt.hist(density, number_of_bins)
+        plt.ylabel('Soundings per Square Meter')
+        plt.title('Density Histogram')
+
+    def plot_density_vs_depth(self):
+        """
+        Plot the soundings per cell vs depth as a scatter plot
+        """
+
+        density, depth = self.density_count_vs_depth
+        density, depth = np.array(density), np.array(depth)
+        plt.scatter(depth, density)
+        plt.xlabel('Depth (meters)')
+        plt.ylabel('Soundings per Cell')
+        plt.title('Density vs Depth')
+
+    def plot_density_per_square_meter_vs_depth(self):
+        """
+        Plot the soundings per square meter vs depth as a scatter plot
+        """
+
+        density, depth = self.density_per_square_meter_vs_depth
+        density, depth = np.array(density), np.array(depth)
+        plt.scatter(depth, density)
+        plt.xlabel('Depth (meters)')
+        plt.ylabel('Soundings per Square Meter')
+        plt.title('Density vs Depth')
 
     def return_layer_names(self):
         """

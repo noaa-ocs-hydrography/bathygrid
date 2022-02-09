@@ -230,8 +230,7 @@ class SRTile(Tile):
             coverage area in square nautical miles
         """
 
-        sqnm = round(self.coverage_area_square_meters / 3434290.012, 3)
-        return sqnm
+        return self.coverage_area_square_meters / 3434290.012
 
     def _calculate_resolution_lookup(self):
         """
