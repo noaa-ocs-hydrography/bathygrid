@@ -759,7 +759,7 @@ class BathyGrid(BaseGrid):
         """
         With get_chunks_of_tiles, we build a small grid/geotransform from many tiles until we hit the maximum chunk width.
         Here we take those tiles and build the small grid.            
-    
+
         Parameters
         ----------
         column_indices
@@ -803,7 +803,7 @@ class BathyGrid(BaseGrid):
             if for_gdal:
                 finaldata[lyr] = np.fliplr(finaldata[lyr].T)
         return finaldata
-    
+
     def get_chunks_of_tiles(self, resolution: float = None, layer: Union[str, list] = 'depth',
                             nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False,
                             override_maximum_chunk_dimension: float = None, for_gdal: bool = True):
@@ -1196,7 +1196,7 @@ class BathyGrid(BaseGrid):
             plt.pcolormesh(lon2d, lat2d, data_m.T)
         plt.title('{}'.format(layer))
 
-    def plot_density_histogram(self, number_of_bins: int = 10):
+    def plot_density_histogram(self, number_of_bins: int = 50):
         """
         Build histogram plot of the soundings per cell across all tiles in the grid
 
@@ -1208,10 +1208,11 @@ class BathyGrid(BaseGrid):
 
         density = np.array(self.density_count)
         plt.hist(density, number_of_bins)
-        plt.ylabel('Soundings per Cell')
-        plt.title('Density Histogram')
+        plt.xlabel('Soundings per Cell')
+        plt.ylabel('Number of Cells')
+        plt.title(f'Density Histogram (bins={number_of_bins})')
 
-    def plot_density_per_square_meter_histogram(self, number_of_bins: int = 10):
+    def plot_density_per_square_meter_histogram(self, number_of_bins: int = 50):
         """
         Build histogram plot of the soundings per square meter across all tiles in the grid
 
@@ -1223,32 +1224,49 @@ class BathyGrid(BaseGrid):
 
         density = np.array(self.density_per_square_meter)
         plt.hist(density, number_of_bins)
-        plt.ylabel('Soundings per Square Meter')
-        plt.title('Density Histogram')
+        plt.xlabel('Soundings per Square Meter')
+        plt.ylabel('Number of Cells')
+        plt.title(f'Density Histogram (bins={number_of_bins})')
 
-    def plot_density_vs_depth(self):
+    def plot_density_vs_depth(self, number_of_bins: int = 50):
         """
-        Plot the soundings per cell vs depth as a scatter plot
+        Plot the average density vs depth using the number of bins provided to sum/average the density count
         """
 
         density, depth = self.density_count_vs_depth
         density, depth = np.array(density), np.array(depth)
-        plt.scatter(depth, density)
-        plt.xlabel('Depth (meters)')
-        plt.ylabel('Soundings per Cell')
-        plt.title('Density vs Depth')
+        mindepth, maxdepth = min(depth), max(depth)
+        bins = np.linspace(mindepth, maxdepth, number_of_bins + 1)
+        bin_indices = np.digitize(depth, bins)
+        bin_sort = np.argsort(bin_indices)
+        unique_indices, uidx, ucounts = np.unique(bin_indices[bin_sort], return_index=True, return_counts=True)
+        counts_sum = np.add.reduceat(density[bin_sort], uidx, axis=0)
+        counts_mean = counts_sum / ucounts
 
-    def plot_density_per_square_meter_vs_depth(self):
+        plt.plot(bins, counts_mean)
+        plt.xlabel('Depth (meters)')
+        plt.ylabel('Average Soundings per Cell')
+        plt.title(f'Average Density vs Depth (bins={number_of_bins})')
+
+    def plot_density_per_square_meter_vs_depth(self, number_of_bins: int = 50):
         """
-        Plot the soundings per square meter vs depth as a scatter plot
+        Plot the average density vs depth using the number of bins provided to sum/average the density per square meter
         """
 
         density, depth = self.density_per_square_meter_vs_depth
         density, depth = np.array(density), np.array(depth)
-        plt.scatter(depth, density)
+        mindepth, maxdepth = min(depth), max(depth)
+        bins = np.linspace(mindepth, maxdepth, number_of_bins + 1)
+        bin_indices = np.digitize(depth, bins)
+        bin_sort = np.argsort(bin_indices)
+        unique_indices, uidx, ucounts = np.unique(bin_indices[bin_sort], return_index=True, return_counts=True)
+        dsm_sum = np.add.reduceat(density[bin_sort], uidx, axis=0)
+        dsm_mean = dsm_sum / ucounts
+
+        plt.plot(bins, dsm_mean)
         plt.xlabel('Depth (meters)')
-        plt.ylabel('Soundings per Square Meter')
-        plt.title('Density vs Depth')
+        plt.ylabel('Average Soundings per Square Meter')
+        plt.title(f'Average Density vs Depth (bins={number_of_bins})')
 
     def return_layer_names(self):
         """
