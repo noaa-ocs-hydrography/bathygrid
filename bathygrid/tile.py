@@ -628,7 +628,7 @@ class SRTile(Tile):
             if auto_resolution_mode == 'depth':
                 resolution = self._calculate_resolution_lookup()
             elif auto_resolution_mode == 'density':
-                resolution = self.resolution_by_densityv2()
+                resolution = self.resolution_by_density()
             else:
                 raise ValueError('Tile given no resolution and an option of {} which is not supported'.format(auto_resolution_mode))
         if not is_power_of_two(resolution):
