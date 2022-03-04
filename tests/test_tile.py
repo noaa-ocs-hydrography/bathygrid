@@ -193,29 +193,29 @@ def test_get_layers_by_name_params():
     assert layer_data[3][2] == np.float32(-9.464)
 
 
-def test_resolution_by_density():
+def test_resolution_by_density_old():
     til = SRTile(403744.0, 4122656.0, 32)
     til.add_points(realdata, 'test1')
-    assert til.resolution_by_density() == 8.0
+    assert til.resolution_by_density_old() == 8.0
     # even if you start at a different resolution, you eventually get the same answer
-    assert til.resolution_by_density(starting_resolution=0.5) == 8.0
+    assert til.resolution_by_density_old(starting_resolution=0.5) == 8.0
     # provided starter resolution must be one of the valid powers of two
     try:
-        til.resolution_by_density(starting_resolution=666)
+        til.resolution_by_density_old(starting_resolution=666)
         assert False
     except ValueError:
         assert True
 
 
-def test_resolution_by_densityv2():
+def test_resolution_by_density():
     til = SRTile(403744.0, 4122656.0, 32)
     til.add_points(realdata, 'test1')
     # with a coarse resolution we see the result of the density based estimate
-    assert til.resolution_by_densityv2() == 16.0
+    assert til.resolution_by_density() == 16.0
     # with too fine a resolution, we see it default back to the old lookup resolution by density method
-    assert til.resolution_by_densityv2(starting_resolution=0.5) == 0.5
+    assert til.resolution_by_density(starting_resolution=0.5) == 0.5
     try:
-        til.resolution_by_densityv2(starting_resolution=666)
+        til.resolution_by_density(starting_resolution=666)
         assert False
     except ValueError:
         assert True
