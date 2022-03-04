@@ -492,9 +492,9 @@ class SRTile(Tile):
         else:
             return True, ''
 
-    def resolution_by_density(self, starting_resolution: float = None):
+    def resolution_by_density_old(self, starting_resolution: float = None):
         """
-        DEPRECATED: See resolution_by_densityv2
+        DEPRECATED: See resolution_by_density
         A recursive check with the points in this tile to identify the best resolution based on density.  We start with
         the depth resolution lookup resolution, binning the points and determining if grid_variables.check_cells_percentage
         of the cells have the appropriate number of points per cell, see grid_variables.minimum_points_per_cell.  We then
@@ -540,7 +540,7 @@ class SRTile(Tile):
             if current_rez in checked_rez:
                 return max(current_rez, checked_rez[-1])
 
-    def resolution_by_densityv2(self, starting_resolution: float = None, noise_factor: float = None):
+    def resolution_by_density(self, starting_resolution: float = None, noise_factor: float = None):
         """
         A density based check adapted from the "Computationally efficient variable resolution depth estimation" paper by
         Brian Calder/Glen Rice.  Determine the density for a coarse resolution grid on the tile (starting_resolution)
