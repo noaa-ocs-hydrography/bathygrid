@@ -407,6 +407,12 @@ class NumpyGrid(BaseStorage):
                     self._save_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), tile.cells[resolution]['vertical_uncertainty'])
                 if 'horizontal_uncertainty' in tile.cells[resolution]:
                     self._save_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), tile.cells[resolution]['horizontal_uncertainty'])
+                if 'total_uncertainty' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_total_uncertainty'.format(resolution), tile.cells[resolution]['total_uncertainty'])
+                if 'hypothesis_count' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_hypothesis_count'.format(resolution), tile.cells[resolution]['hypothesis_count'])
+                if 'hypothesis_ratio' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution), tile.cells[resolution]['hypothesis_ratio'])
                 self._save_array(folderpath + '/cell_edges_x_{}'.format(resolution), tile.cell_edges_x[resolution])
                 self._save_array(folderpath + '/cell_edges_y_{}'.format(resolution), tile.cell_edges_y[resolution])
         # both require saving the indices, which are updated on adding/removing points and when gridding
@@ -453,6 +459,12 @@ class NumpyGrid(BaseStorage):
                     tile.cells[resolution]['vertical_uncertainty'] = self._load_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
                     tile.cells[resolution]['horizontal_uncertainty'] = self._load_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_total_uncertainty'.format(resolution)):
+                    tile.cells[resolution]['total_uncertainty'] = self._load_array(folderpath + '/cells_{}_total_uncertainty'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
+                    tile.cells[resolution]['hypothesis_count'] = self._load_array(folderpath + '/cells_{}_hypothesis_count'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution)):
+                    tile.cells[resolution]['hypothesis_ratio'] = self._load_array(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution))
                 tile.cell_edges_x[resolution] = self._load_array(folderpath + '/cell_edges_x_{}'.format(resolution))
                 tile.cell_edges_y[resolution] = self._load_array(folderpath + '/cell_edges_y_{}'.format(resolution))
         for resolution in resolutions:
@@ -576,6 +588,12 @@ class ZarrGrid(BaseStorage):
                     self._save_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution), tile.cells[resolution]['vertical_uncertainty'])
                 if 'horizontal_uncertainty' in tile.cells[resolution]:
                     self._save_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution), tile.cells[resolution]['horizontal_uncertainty'])
+                if 'total_uncertainty' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_total_uncertainty'.format(resolution), tile.cells[resolution]['total_uncertainty'])
+                if 'hypothesis_count' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_hypothesis_count'.format(resolution), tile.cells[resolution]['hypothesis_count'])
+                if 'hypothesis_ratio' in tile.cells[resolution]:
+                    self._save_array(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution), tile.cells[resolution]['hypothesis_ratio'])
                 self._save_array(folderpath + '/cell_edges_x_{}'.format(resolution), tile.cell_edges_x[resolution])
                 self._save_array(folderpath + '/cell_edges_y_{}'.format(resolution), tile.cell_edges_y[resolution])
         # both require saving the indices, which are updated on adding/removing points and when gridding
@@ -622,6 +640,12 @@ class ZarrGrid(BaseStorage):
                     tile.cells[resolution]['vertical_uncertainty'] = self._load_array(folderpath + '/cells_{}_vertical_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
                     tile.cells[resolution]['horizontal_uncertainty'] = self._load_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_total_uncertainty'.format(resolution)):
+                    tile.cells[resolution]['total_uncertainty'] = self._load_array(folderpath + '/cells_{}_total_uncertainty'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
+                    tile.cells[resolution]['hypothesis_count'] = self._load_array(folderpath + '/cells_{}_hypothesis_count'.format(resolution))
+                if os.path.exists(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution)):
+                    tile.cells[resolution]['hypothesis_ratio'] = self._load_array(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution))
                 tile.cell_edges_x[resolution] = self._load_array(folderpath + '/cell_edges_x_{}'.format(resolution))
                 tile.cell_edges_y[resolution] = self._load_array(folderpath + '/cell_edges_y_{}'.format(resolution))
         for resolution in resolutions:

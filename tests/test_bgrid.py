@@ -191,6 +191,25 @@ def test_SRGrid_grid_shoalest():
     assert lyrs[3][848, 0] == 1.0
 
 
+def test_SRGrid_grid_cube():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.is_empty
+    assert bg.no_grid
+
+    res = bg.grid(algorithm='cube', grid_parameters={'variance_selection': 'cube', 'method': 'local', 'iho_order': 'order1a'})
+    assert not bg.no_grid
+    assert res == [0.5]
+    assert bg.data is None  # after adding we clear the point data to free memory
+    lyrs = bg.get_layers_by_name(['depth', 'density', 'total_uncertainty', 'hypothesis_count', 'hypothesis_ratio'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == lyrs[4].size == 4194304
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[2])) == np.count_nonzero(lyrs[3]) == np.count_nonzero(~np.isnan(lyrs[4])) == 0
+    assert lyrs[0][848, 0] == 20.0
+    assert lyrs[1][848, 0] == 1
+    assert lyrs[2][848, 0] == 0.5
+    assert lyrs[3][848, 0] == 1.0
+
+
 def test_auto_resolution_methods():
     bg = SRGrid(tile_size=1024)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')

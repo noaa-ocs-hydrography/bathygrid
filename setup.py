@@ -30,7 +30,8 @@ REQUIRED = [
             'numpy>=1.20.1',  # cannot be 1.19.4, see https://tinyurl.com/y3dm3h86
             'scipy>=1.6.0',
             'xarray>=0.17.0',
-            'zarr>=2.6.1'
+            'zarr>=2.6.1',
+            'bathycube @ git+https://github.com/noaa-ocs-hydrography/bathycube.git#egg=bathycube'
             ]
 
 # What packages are optional?

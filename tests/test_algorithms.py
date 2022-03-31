@@ -1,6 +1,6 @@
 from bathygrid.algorithms import *
 from bathygrid.utilities import is_power_of_two, bin2d_with_indices
-from test_data.test_data import get_grid_data, realdata
+from test_data.test_data import get_grid_data, realdata, get_cube_grid_data
 from pytest import approx
 
 
@@ -143,3 +143,13 @@ def test_grid_slopes():
 
     assert slpx.shape == (cell_edges_x.shape[0] - 1, cell_edges_y.shape[0] - 1)
     assert slpy.shape == (cell_edges_x.shape[0] - 1, cell_edges_y.shape[0] - 1)
+
+
+def test_nb_cube():
+    x, y, depth, tvu, thu, cell_indices, grid, density_grid, numhyp_grid, tpugrid, ratiogrid = get_cube_grid_data()
+    resolution_x, resolution_y = (1.0, 1.0)
+    nb_cube(x, y, depth, cell_indices, grid, density_grid, tvu, thu, tpugrid, numhyp_grid, ratiogrid, min(x), max(y),
+            'order1a', 'local', resolution_x, resolution_y)
+    # need to get this working
+    assert False
+
