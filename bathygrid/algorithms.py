@@ -197,12 +197,12 @@ def nb_cube(x: np.array, y: np.array, depth: np.array, cell_indices: np.array, g
                                                                               minimum_easting, maximum_northing, method,
                                                                               iho_order, grid_resolution_x, grid_resolution_y,
                                                                               **kwargs)
-    validindex = ~np.isnan(_dpth_grid)
-    grid[validindex] = _dpth_grid[validindex]
+    validindex = ~np.isnan(_dpth_grid[::-1, :])
+    grid[validindex] = _dpth_grid[::-1, :][validindex]
     density_grid[urow, ucol] = ucounts
-    tpu_grid[validindex] = _uncrtainty_grid[validindex]
-    ratio_grid[validindex] = _rtio_grid[validindex]
-    numhyp_grid[validindex] = _nmhyp_grid[validindex]
+    tpu_grid[validindex] = _uncrtainty_grid[::-1, :][validindex]
+    ratio_grid[validindex] = _rtio_grid[::-1, :][validindex]
+    numhyp_grid[validindex] = _nmhyp_grid[::-1, :][validindex]
     return grid, tpu_grid
 
 

@@ -17,6 +17,7 @@ class Tile(TileGrid):
     def __init__(self, min_x: float, min_y: float, size: float):
         super().__init__(min_x, min_y, size)
         self.algorithm = None
+        self.grid_parameters = None
 
     def clear_grid(self):
         """
@@ -396,11 +397,9 @@ class SRTile(Tile):
     def _cube_grid_algorithm_initialize(self, resolution: float, only_container: str = None):
         if not isinstance(self.data, np.ndarray):
             vert_val = self.data['tvu'].compute()
-        else:
-            vert_val = self.data['tvu']
-        if not isinstance(self.data, np.ndarray):
             horiz_val = self.data['thu'].compute()
         else:
+            vert_val = self.data['tvu']
             horiz_val = self.data['thu']
 
         if not only_container:
@@ -418,12 +417,13 @@ class SRTile(Tile):
             self.cells[resolution][only_container + '_density'] = np.full(self.cells[resolution][self.depth_key].shape, 0, dtype=int)
         else:
             depth_val = self.data['z']
+        if not isinstance(self.data, np.ndarray):
+            depth_val = depth_val.compute()
 
         if only_container:
             cindx = self.cell_indices[resolution][self.container[only_container][0]:self.container[only_container][1]]
         else:
             cindx = self.cell_indices[resolution]
-
         if not isinstance(cindx, np.ndarray):
             cindx = cindx.compute()
         return vert_val, horiz_val, depth_val, totalunc_grid, hypcnt_grid, hypratio_grid, cindx
@@ -493,8 +493,8 @@ class SRTile(Tile):
                     vert_val, horiz_val, totalunc_grid, hypcnt_grid, hypratio_grid, self.min_x, self.max_y, iho_order, grid_method,
                     resolution, resolution, variance_selection=grid_variance_selection)
             self.cells[resolution][self.depth_key] = np.round(self.cells[resolution][self.depth_key], 3)
-            self.cells[resolution]['total_uncertainty'] = np.round(self.cells[resolution][self.depth_key], 3)
-            self.cells[resolution]['hypothesis_ratio'] = np.round(self.cells[resolution][self.depth_key], 3)
+            self.cells[resolution]['total_uncertainty'] = np.round(self.cells[resolution]['total_uncertainty'], 3)
+            self.cells[resolution]['hypothesis_ratio'] = np.round(self.cells[resolution]['hypothesis_ratio'], 3)
         else:
             nb_cube(x_val, y_val, depth_val, cindx, self.cells[resolution][only_container], self.cells[resolution][only_container + '_density'],
                     vert_val, horiz_val, totalunc_grid, hypcnt_grid, hypratio_grid, self.min_x, self.max_y, iho_order, grid_method,
@@ -786,10 +786,10 @@ class SRTile(Tile):
         """
 
         container_query = False
-        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'x_slope', 'y_slope']:
+        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio', 'x_slope', 'y_slope']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(nodatavalue)
-        elif layer == 'density':
+        elif layer in ['density', 'hypothesis_count']:
             # density has to have an integer based nodatavalue
             try:
                 nodatavalue = np.int(nodatavalue)
@@ -846,10 +846,10 @@ class SRTile(Tile):
         list
             list of all values in the grid across all resolutions, excluding nodatavalues
         """
-        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty']:
+        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(np.nan)
-        elif layer == 'density':
+        elif layer in ['density', 'hypothesis_count']:
             nodatavalue = 0
         else:
             raise ValueError("Bathygrid: return_layer_values - only 'depth', 'density', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty' currently supported")

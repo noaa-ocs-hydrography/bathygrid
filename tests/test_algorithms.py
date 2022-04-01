@@ -150,6 +150,53 @@ def test_nb_cube():
     resolution_x, resolution_y = (1.0, 1.0)
     nb_cube(x, y, depth, cell_indices, grid, density_grid, tvu, thu, tpugrid, numhyp_grid, ratiogrid, min(x), max(y),
             'order1a', 'local', resolution_x, resolution_y)
-    # need to get this working
-    assert False
 
+    assert grid[0][0] == approx(13.474, abs=0.001)
+    assert grid[0][1] == approx(13.528, abs=0.001)
+    assert grid[0][2] == approx(13.602, abs=0.001)
+    assert grid[1][0] == approx(16.766, abs=0.001)
+    assert grid[1][1] == approx(16.814, abs=0.001)
+    assert grid[1][2] == approx(16.880, abs=0.001)
+    assert grid[2][0] == approx(18.771, abs=0.001)
+    assert grid[2][1] == approx(18.827, abs=0.001)
+    assert grid[2][2] == approx(18.860, abs=0.001)
+
+    assert density_grid[0][0] == 125
+    assert density_grid[0][1] == 125
+    assert density_grid[0][2] == 125
+    assert density_grid[1][0] == 125
+    assert density_grid[1][1] == 125
+    assert density_grid[1][2] == 125
+    assert density_grid[2][0] == 125
+    assert density_grid[2][1] == 124
+    assert density_grid[2][2] == 1
+
+    assert numhyp_grid[0][0] == 1
+    assert numhyp_grid[0][1] == 1
+    assert numhyp_grid[0][2] == 1
+    assert numhyp_grid[1][0] == 1
+    assert numhyp_grid[1][1] == 1
+    assert numhyp_grid[1][2] == 1
+    assert numhyp_grid[2][0] == 1
+    assert numhyp_grid[2][1] == 1
+    assert numhyp_grid[2][2] == 1
+
+    assert tpugrid[0][0] == approx(0.114, abs=0.001)
+    assert tpugrid[0][1] == approx(0.081, abs=0.001)
+    assert tpugrid[0][2] == approx(0.113, abs=0.001)
+    assert tpugrid[1][0] == approx(0.114, abs=0.001)
+    assert tpugrid[1][1] == approx(0.0815, abs=0.001)
+    assert tpugrid[1][2] == approx(0.114, abs=0.001)
+    assert tpugrid[2][0] == approx(0.165, abs=0.001)
+    assert tpugrid[2][1] == approx(0.118, abs=0.001)
+    assert tpugrid[2][2] == approx(0.166, abs=0.001)
+
+    assert ratiogrid[0][0] == 0.0
+    assert ratiogrid[0][1] == 0.0
+    assert ratiogrid[0][2] == 0.0
+    assert ratiogrid[1][0] == 0.0
+    assert ratiogrid[1][1] == 0.0
+    assert ratiogrid[1][2] == 0.0
+    assert ratiogrid[2][0] == 0.0
+    assert ratiogrid[2][1] == 0.0
+    assert ratiogrid[2][2] == 0.0

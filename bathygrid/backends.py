@@ -461,7 +461,7 @@ class NumpyGrid(BaseStorage):
                     tile.cells[resolution]['horizontal_uncertainty'] = self._load_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_total_uncertainty'.format(resolution)):
                     tile.cells[resolution]['total_uncertainty'] = self._load_array(folderpath + '/cells_{}_total_uncertainty'.format(resolution))
-                if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
+                if os.path.exists(folderpath + '/cells_{}_hypothesis_count'.format(resolution)):
                     tile.cells[resolution]['hypothesis_count'] = self._load_array(folderpath + '/cells_{}_hypothesis_count'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution)):
                     tile.cells[resolution]['hypothesis_ratio'] = self._load_array(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution))
@@ -642,7 +642,7 @@ class ZarrGrid(BaseStorage):
                     tile.cells[resolution]['horizontal_uncertainty'] = self._load_array(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_total_uncertainty'.format(resolution)):
                     tile.cells[resolution]['total_uncertainty'] = self._load_array(folderpath + '/cells_{}_total_uncertainty'.format(resolution))
-                if os.path.exists(folderpath + '/cells_{}_horizontal_uncertainty'.format(resolution)):
+                if os.path.exists(folderpath + '/cells_{}_hypothesis_count'.format(resolution)):
                     tile.cells[resolution]['hypothesis_count'] = self._load_array(folderpath + '/cells_{}_hypothesis_count'.format(resolution))
                 if os.path.exists(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution)):
                     tile.cells[resolution]['hypothesis_ratio'] = self._load_array(folderpath + '/cells_{}_hypothesis_ratio'.format(resolution))
