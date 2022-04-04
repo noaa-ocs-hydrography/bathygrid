@@ -26,13 +26,14 @@ bathygrid_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'min_time', 'max_t
                           'origin_y', 'container', 'tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y',
                           'existing_tile_mask', 'maximum_tiles', 'number_of_tiles', 'can_grow', 'tile_size', 'mean_depth', 'epsg',
                           'vertical_reference', 'resolutions', 'name', 'output_folder', 'sub_type', 'subtile_size',
-                          'storage_type', 'grid_algorithm', 'container_timestamp', 'grid_resolution', 'version', 'is_backscatter']
+                          'storage_type', 'grid_algorithm', 'container_timestamp', 'grid_resolution', 'version',
+                          'is_backscatter', 'grid_parameters']
 # these attributes are written to disk but need translation between numpy and list for JSON to work
 bathygrid_numpy_to_list = ['tile_x_origin', 'tile_y_origin', 'tile_edges_x', 'tile_edges_y', 'existing_tile_mask']
 # these attributes are written to disk but need translation between float and string for JSON to work
 bathygrid_float_to_str = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'origin_x', 'origin_y', 'mean_depth']
 # these are the attributes that are written to disk for tiles, see backend
 tile_desired_keys = ['min_y', 'min_x', 'max_y', 'max_x', 'width', 'height', 'container', 'name', 'algorithm',
-                     'point_count_changed', 'is_backscatter']
+                     'grid_parameters', 'point_count_changed', 'is_backscatter']
 # these are the tile attributes that need translation between float and string for JSON to work
 tile_float_to_str = ['min_y', 'min_x', 'max_y', 'max_x']

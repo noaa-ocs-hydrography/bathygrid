@@ -53,6 +53,7 @@ class BathyGrid(BaseGrid):
         self.subtile_size = 0
         self.grid_algorithm = ''
         self.grid_resolution = ''
+        self.grid_parameters = None
         self.sub_type = 'srtile'
         self.storage_type = 'numpy'
         self.client = None
@@ -433,10 +434,11 @@ class BathyGrid(BaseGrid):
             fill layer grid with nodatavalue where there is no data
         """
 
-        if layername in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty']:
+        if layername in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty',
+                         'hypothesis_ratio']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(nodatavalue)
-        elif layername == 'density':
+        elif layername in ['density', 'hypothesis_count']:
             # density has to have an integer based nodatavalue
             try:
                 nodatavalue = np.int(nodatavalue)
@@ -700,7 +702,8 @@ class BathyGrid(BaseGrid):
             resolution of the layer we want to access, if not provided will use the first resolution found, will error if there is
             more than one resolution in the grid
         layer
-            string identifier for the layer(s) to access, valid layers include 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+            string identifier for the layer(s) to access, valid layers include 'depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty',
+            'hypothesis_ratio
         nodatavalue
             nodatavalue to set in the regular grid
         z_positive_up
@@ -803,10 +806,10 @@ class BathyGrid(BaseGrid):
         minrow = min(row_indices)
         curdrow = [row - minrow for row in row_indices]
         for lyr in layers:
-            if lyr in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty']:
+            if lyr in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio']:
                 # ensure nodatavalue is a float32
                 nodatavalue = np.float32(nodatavalue)
-            elif lyr == 'density':
+            elif lyr in ['density', 'hypothesis_count']:
                 # density has to have an integer based nodatavalue
                 try:
                     nodatavalue = np.int(nodatavalue)
@@ -837,7 +840,7 @@ class BathyGrid(BaseGrid):
             resolution of the layer we want to access, if not provided will use the first resolution found, will error if there is
             more than one resolution in the grid
         layer
-            string identifier for the layer(s) to access, valid layers include 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+            string identifier for the layer(s) to access, valid layers include 'depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio'
         nodatavalue
             nodatavalue to set in the regular grid
         z_positive_up
@@ -897,7 +900,7 @@ class BathyGrid(BaseGrid):
         Parameters
         ----------
         layer
-            string identifier for the layer(s) to access, valid layers include 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+            string identifier for the layer(s) to access, valid layers include 'depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio'
         resolution
             resolution of the layer we want to access
         nodatavalue
@@ -950,7 +953,7 @@ class BathyGrid(BaseGrid):
         Parameters
         ----------
         layer
-            string identifier for the layer to access, one of 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+            string identifier for the layer to access, one of 'depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio'
         resolution
             resolution of the layer we want to access
         nodatavalue
@@ -1023,11 +1026,14 @@ class BathyGrid(BaseGrid):
                                 self.resolutions.append(rz)
                         continue
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
-                    rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+                    rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
+                                    grid_parameters=self.grid_parameters)
                 elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
-                    rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+                    rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
+                                    grid_parameters=self.grid_parameters)
                 else:
-                    rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+                    rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
+                                    grid_parameters=self.grid_parameters)
                 if isinstance(rez, float) or isinstance(rez, int):
                     rez = [rez]
                 for rz in rez:
@@ -1115,7 +1121,7 @@ class BathyGrid(BaseGrid):
                 if self.sub_type in ['srtile', 'quadtile']:
                     self._load_tile_data_to_memory(tile)
                 tile_indices.append(cnt)
-                data_for_workers.append([tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, self.name])
+                data_for_workers.append([tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, self.name, self.grid_parameters])
                 chunk_index += 1
                 if chunk_index == chunks_at_a_time:
                     print('processing surface: group {} out of {}'.format(cur_run, total_runs))
@@ -1131,7 +1137,7 @@ class BathyGrid(BaseGrid):
         self._save_grid()
 
     def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
-             regrid_option: str = 'full', use_dask: bool = False, progress_bar: bool = True):
+             regrid_option: str = 'full', use_dask: bool = False, progress_bar: bool = True, grid_parameters: dict = None):
         """
         Gridding involves calling 'grid' on all child grids/tiles until you eventually call 'grid' on a Tile.  The Tiles
         are the objects that actually contain the points / gridded data
@@ -1154,6 +1160,8 @@ class BathyGrid(BaseGrid):
             if True, will start a dask LocalCluster instance and perform the gridding in parallel
         progress_bar
             if True, display a progress bar
+        grid_parameters
+            optional dict of settings to pass to the grid algorithm
         """
 
         if self.grid_algorithm and (self.grid_algorithm != algorithm) and not clear_existing:
@@ -1164,6 +1172,7 @@ class BathyGrid(BaseGrid):
 
         self.grid_algorithm = algorithm
         self.grid_resolution = resolution
+        self.grid_parameters = grid_parameters
         if resolution is not None:
             resolution = float(resolution)
         if self.is_empty:
@@ -1192,7 +1201,7 @@ class BathyGrid(BaseGrid):
         Parameters
         ----------
         layer
-            string identifier for the layer to access, one of 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+            string identifier for the layer to access, one of 'depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio'
         resolution
             resolution of the layer we want to access
         """
@@ -1391,7 +1400,7 @@ class BathyGrid(BaseGrid):
         Parameters
         ----------
         layer
-            string identifier for the layer to access, one of 'depth', 'horizontal_uncertainty', 'vertical_uncertainty'
+            string identifier for the layer to access, one of 'depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio'
         resolution
             resolution of the layer we want to access
         cell_boundaries
@@ -1588,13 +1597,16 @@ def _gridding_parallel(data_blob: list):
     """
     Gridding routine suited for running in parallel using the dask cluster.
     """
-    tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name = data_blob
+    tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name, grid_parameters = data_blob
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
-        rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+        rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
+                        grid_parameters=grid_parameters)
     elif isinstance(tile, SRTile) and auto_resolution and grid_name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
-        rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+        rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
+                        grid_parameters=grid_parameters)
     else:
-        rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False)
+        rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
+                        grid_parameters=grid_parameters)
     return rez, tile
 
 
@@ -1921,7 +1933,7 @@ class OperationalGrid(BathyGrid):
         """
 
         lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
-                         'horizontal_uncertainty': 'Horizontal Uncertainty', 'intensity': 'Intensity'}
+                         'total_uncertainty': 'Total Uncertainty', 'horizontal_uncertainty': 'Horizontal Uncertainty', 'intensity': 'Intensity'}
         nodatavalue = 1000000.0
         basefile, baseext = os.path.splitext(filepath)
         if resolution is not None:
@@ -1931,7 +1943,7 @@ class OperationalGrid(BathyGrid):
         if self.is_backscatter:
             layernames = ['intensity']
         else:
-            layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty']]
+            layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty', 'total_uncertainty']]
         finalnames = [lyrtranslator[lname] for lname in layernames]
         if z_positive_up and finalnames.index('Depth') != -1:
             finalnames[finalnames.index('Depth')] = 'Elevation'
@@ -1981,7 +1993,7 @@ class OperationalGrid(BathyGrid):
                        'VAR_SECURITY_USER_NOTE=' + security_user_note]
 
         lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
-                         'horizontal_uncertainty': 'Horizontal Uncertainty'}
+                         'total_uncertainty': 'Total Uncertainty', 'horizontal_uncertainty': 'Horizontal Uncertainty', 'intensity': 'Intensity'}
         nodatavalue = 1000000.0
         z_positive_up = True
         basefile, baseext = os.path.splitext(filepath)
@@ -1989,7 +2001,7 @@ class OperationalGrid(BathyGrid):
             resolutions = [resolution]
         else:
             resolutions = self.resolutions
-        layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty']]
+        layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty', 'total_uncertainty']]
         finalnames = [lyrtranslator[lname] for lname in layernames]
         if z_positive_up and finalnames.index('Depth') != -1:
             finalnames[finalnames.index('Depth')] = 'Elevation'
@@ -2017,7 +2029,8 @@ class OperationalGrid(BathyGrid):
         """
 
         data = {'grid_folder': self.output_folder, 'name': self.name, 'type': type(self), 'grid_resolution': self.grid_resolution,
-                'grid_algorithm': self.grid_algorithm, 'epsg': self.epsg, 'vertical_reference': self.vertical_reference,
+                'grid_algorithm': self.grid_algorithm, 'grid_parameters': self.grid_parameters, 'epsg': self.epsg,
+                'vertical_reference': self.vertical_reference,
                 'height': self.height, 'width': self.width, 'minimum_x': self.min_x, 'maximum_x': self.max_x,
                 'minimum_y': self.min_y, 'maximum_y': self.max_y, 'minimum_time_utc': self.min_time,
                 'maximum_time_utc': self.max_time, 'tile_size': self.tile_size,

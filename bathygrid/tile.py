@@ -3,7 +3,7 @@ from dask.array import Array as darray
 
 from bathygrid.grids import TileGrid
 from bathygrid.utilities import bin2d_with_indices, is_power_of_two
-from bathygrid.algorithms import np_grid_mean, np_grid_shoalest, calculate_slopes
+from bathygrid.algorithms import np_grid_mean, np_grid_shoalest, calculate_slopes, nb_cube
 from bathygrid.grid_variables import depth_resolution_lookup, minimum_points_per_cell, starting_resolution_density, \
     noise_accomodation_factor, revert_to_lookup_threshold
 
@@ -17,6 +17,7 @@ class Tile(TileGrid):
     def __init__(self, min_x: float, min_y: float, size: float):
         super().__init__(min_x, min_y, size)
         self.algorithm = None
+        self.grid_parameters = None
 
     def clear_grid(self):
         """
@@ -342,6 +343,12 @@ class SRTile(Tile):
                 self.cells[resolution]['vertical_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
             if self.data is not None and 'thu' in self.data.dtype.names:
                 self.cells[resolution]['horizontal_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
+        elif algorithm == 'cube':
+            self.cells[resolution][self.depth_key] = np.full(grid_shape, nodatavalue, dtype=np.float32)
+            self.cells[resolution]['density'] = np.full(grid_shape, 0, dtype=int)
+            self.cells[resolution]['hypothesis_count'] = np.full(grid_shape, 0, dtype=int)
+            self.cells[resolution]['total_uncertainty'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
+            self.cells[resolution]['hypothesis_ratio'] = np.full(grid_shape, nodatavalue, dtype=np.float32)
 
     def _clear_temp_data(self, resolution: float):
         """
@@ -387,6 +394,40 @@ class SRTile(Tile):
             cindx = cindx.compute()
         return vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx
 
+    def _cube_grid_algorithm_initialize(self, resolution: float, only_container: str = None):
+        if not isinstance(self.data, np.ndarray):
+            vert_val = self.data['tvu'].compute()
+            horiz_val = self.data['thu'].compute()
+        else:
+            vert_val = self.data['tvu']
+            horiz_val = self.data['thu']
+
+        if not only_container:
+            totalunc_grid = self.cells[resolution]['total_uncertainty']
+            hypcnt_grid = self.cells[resolution]['hypothesis_count']
+            hypratio_grid = self.cells[resolution]['hypothesis_ratio']
+        else:
+            totalunc_grid = np.array([])
+            hypcnt_grid = np.array([])
+            hypratio_grid = np.array([])
+
+        if only_container:
+            depth_val = self.data['z'][self.container[only_container][0]:self.container[only_container][1]]
+            self.cells[resolution][only_container] = np.full(self.cells[resolution][self.depth_key].shape, np.float32(np.nan), dtype=np.float32)
+            self.cells[resolution][only_container + '_density'] = np.full(self.cells[resolution][self.depth_key].shape, 0, dtype=int)
+        else:
+            depth_val = self.data['z']
+        if not isinstance(self.data, np.ndarray):
+            depth_val = depth_val.compute()
+
+        if only_container:
+            cindx = self.cell_indices[resolution][self.container[only_container][0]:self.container[only_container][1]]
+        else:
+            cindx = self.cell_indices[resolution]
+        if not isinstance(cindx, np.ndarray):
+            cindx = cindx.compute()
+        return vert_val, horiz_val, depth_val, totalunc_grid, hypcnt_grid, hypratio_grid, cindx
+
     def _run_mean_grid(self, resolution: float, only_container: str = None):
         """
         Run the mean algorithm on the Tile data
@@ -419,6 +460,45 @@ class SRTile(Tile):
                 self.cells[resolution]['horizontal_uncertainty'] = np.round(self.cells[resolution]['horizontal_uncertainty'], 3)
         else:
             np_grid_shoalest(depth_val, cindx, self.cells[resolution][only_container], self.cells[resolution][only_container + '_density'], vert_val, horiz_val, vert_grid, horiz_grid)
+            self.cells[resolution][only_container] = np.round(self.cells[resolution][only_container], 3)
+
+    def _run_cube_grid(self, resolution: float, grid_parameters: dict = float, only_container: str = None):
+        vert_val, horiz_val, depth_val, totalunc_grid, hypcnt_grid, hypratio_grid, cindx = self._cube_grid_algorithm_initialize(resolution, only_container=only_container)
+        if not isinstance(self.data, np.ndarray):
+            x_val = self.data['x'].compute()
+            y_val = self.data['y'].compute()
+        else:
+            x_val = self.data['x']
+            y_val = self.data['y']
+        if grid_parameters and 'method' in grid_parameters:
+            grid_method = grid_parameters['method']
+        else:
+            print('WARNING: cube method not found in given parameters, defaulting to "local"')
+            grid_method = 'local'
+
+        if grid_parameters and 'iho_order' in grid_parameters:
+            iho_order = grid_parameters['iho_order']
+        else:
+            print('WARNING: cube iho_order not found in given parameters, defaulting to "order1a"')
+            iho_order = 'order1a'
+
+        if grid_parameters and 'variance_selection' in grid_parameters:
+            grid_variance_selection = grid_parameters['variance_selection']
+        else:
+            print('WARNING: cube variance_selection not found in given parameters, defaulting to "cube"')
+            grid_variance_selection = 'cube'
+
+        if not only_container:
+            nb_cube(x_val, y_val, depth_val, cindx, self.cells[resolution][self.depth_key], self.cells[resolution]['density'],
+                    vert_val, horiz_val, totalunc_grid, hypcnt_grid, hypratio_grid, self.min_x, self.max_y, iho_order, grid_method,
+                    resolution, resolution, variance_selection=grid_variance_selection)
+            self.cells[resolution][self.depth_key] = np.round(self.cells[resolution][self.depth_key], 3)
+            self.cells[resolution]['total_uncertainty'] = np.round(self.cells[resolution]['total_uncertainty'], 3)
+            self.cells[resolution]['hypothesis_ratio'] = np.round(self.cells[resolution]['hypothesis_ratio'], 3)
+        else:
+            nb_cube(x_val, y_val, depth_val, cindx, self.cells[resolution][only_container], self.cells[resolution][only_container + '_density'],
+                    vert_val, horiz_val, totalunc_grid, hypcnt_grid, hypratio_grid, self.min_x, self.max_y, iho_order, grid_method,
+                    resolution, resolution, variance_selection=grid_variance_selection)
             self.cells[resolution][only_container] = np.round(self.cells[resolution][only_container], 3)
 
     def _run_slopes(self, resolution: float):
@@ -599,7 +679,7 @@ class SRTile(Tile):
         return final_rez
 
     def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
-             regrid_option: str = '', progress_bar: bool = False):
+             regrid_option: str = '', progress_bar: bool = False, grid_parameters: dict = None):
         """
         Grid the Tile data using the provided algorithm and resolution.  Stores the gridded data in the Tile
 
@@ -617,6 +697,8 @@ class SRTile(Tile):
             a place holder to match the bgrid grid method
         progress_bar
             a place holder to match the bgrid grid method
+        grid_parameters
+            optional dict of settings to pass to the grid algorithm
 
         Returns
         -------
@@ -639,6 +721,7 @@ class SRTile(Tile):
 
         if resolution not in self.cells or algorithm != self.algorithm:
             self.algorithm = algorithm
+            self.grid_parameters = grid_parameters
             self.new_grid(resolution, algorithm)
         if not isinstance(self.cell_edges_x[resolution], np.ndarray):
             self.cell_edges_x[resolution] = self.cell_edges_x[resolution].compute()
@@ -652,10 +735,9 @@ class SRTile(Tile):
             if not isinstance(self.cells[resolution][self.depth_key], np.ndarray):
                 self.cells[resolution][self.depth_key] = self.cells[resolution][self.depth_key].compute()
                 self.cells[resolution]['density'] = self.cells[resolution]['density'].compute()
-                if 'vertical_uncertainty' in self.cells[resolution]:
-                    self.cells[resolution]['vertical_uncertainty'] = self.cells[resolution]['vertical_uncertainty'].compute()
-                if 'horizontal_uncertainty' in self.cells[resolution]:
-                    self.cells[resolution]['horizontal_uncertainty'] = self.cells[resolution]['horizontal_uncertainty'].compute()
+                for lyr in ['vertical_uncertainty', 'horizontal_uncertainty', 'hypothesis_count', 'total_uncertainty', 'hypothesis_ratio']:
+                    if lyr in self.cells[resolution]:
+                        self.cells[resolution][lyr] = self.cells[resolution][lyr].compute()
             new_points = self.cell_indices[resolution] == -1
             if new_points.any():
                 self.cell_indices[resolution][new_points] = bin2d_with_indices(self.data['x'][new_points], self.data['y'][new_points],
@@ -663,15 +745,19 @@ class SRTile(Tile):
 
             self.cells[resolution][self.depth_key] = np.full(self.cells[resolution][self.depth_key].shape, np.nan, dtype=np.float32)
             self.cells[resolution]['density'] = np.full(self.cells[resolution]['density'].shape, 0, dtype=int)
-            if 'vertical_uncertainty' in self.cells[resolution]:
-                self.cells[resolution]['vertical_uncertainty'] = np.full(self.cells[resolution]['vertical_uncertainty'].shape, np.nan, dtype=np.float32)
-            if 'horizontal_uncertainty' in self.cells[resolution]:
-                self.cells[resolution]['horizontal_uncertainty'] = np.full(self.cells[resolution]['horizontal_uncertainty'].shape, np.nan, dtype=np.float32)
+            for lyr in ['vertical_uncertainty', 'horizontal_uncertainty', 'hypothesis_count', 'total_uncertainty', 'hypothesis_ratio']:
+                if lyr in self.cells[resolution]:
+                    if lyr == 'hypothesis_count':
+                        self.cells[resolution][lyr] = np.full(self.cells[resolution][lyr].shape, 0, dtype=int)
+                    else:
+                        self.cells[resolution][lyr] = np.full(self.cells[resolution][lyr].shape, np.nan, dtype=np.float32)
 
         if algorithm == 'mean':
             self._run_mean_grid(resolution)
         elif algorithm == 'shoalest':
             self._run_shoalest_grid(resolution)
+        elif algorithm == 'cube':
+            self._run_cube_grid(resolution, grid_parameters)
         self.point_count_changed = False
         return resolution
 
@@ -683,7 +769,8 @@ class SRTile(Tile):
         Parameters
         ----------
         layer
-            layer name
+            layer name, can either be a grid layer name ('depth') or the name of a container that exists in the grid
+            that allows you to return the grid for just that layer, i.e. container query
         resolution
             resolution of the layer that we want.  If None, pulls the only layer in the Tile, errors if there is more
             than one layer
@@ -699,17 +786,17 @@ class SRTile(Tile):
         """
 
         container_query = False
-        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'x_slope', 'y_slope']:
+        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio', 'x_slope', 'y_slope']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(nodatavalue)
-        elif layer == 'density':
+        elif layer in ['density', 'hypothesis_count']:
             # density has to have an integer based nodatavalue
             try:
                 nodatavalue = np.int(nodatavalue)
             except ValueError:
                 nodatavalue = 0
         else:
-            # this must be a container query
+            # this must be a container query, layer is the name of a container
             container_query = True
         if self.is_empty:
             return None
@@ -728,6 +815,8 @@ class SRTile(Tile):
                     self._run_mean_grid(resolution, only_container=layer)
                 elif self.algorithm == 'shoalest':
                     self._run_shoalest_grid(resolution, only_container=layer)
+                elif self.algorithm == 'cube':
+                    self._run_cube_grid(resolution, self.grid_parameters, only_container=layer)
             else:
                 self.cells[resolution][layer] = np.full_like(self.cells[resolution][self.depth_key], nodatavalue)
         if layer not in self.cells[resolution]:
@@ -757,10 +846,10 @@ class SRTile(Tile):
         list
             list of all values in the grid across all resolutions, excluding nodatavalues
         """
-        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty']:
+        if layer in ['depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty', 'hypothesis_ratio']:
             # ensure nodatavalue is a float32
             nodatavalue = np.float32(np.nan)
-        elif layer == 'density':
+        elif layer in ['density', 'hypothesis_count']:
             nodatavalue = 0
         else:
             raise ValueError("Bathygrid: return_layer_values - only 'depth', 'density', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty' currently supported")

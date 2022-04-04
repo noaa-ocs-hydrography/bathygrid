@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+from bathycube.numba_cube import run_cube_gridding
+
 
 def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, density_grid: np.ndarray, tvu: np.array = np.array([]),
                  thu: np.array = np.array([]), tvu_grid: np.ndarray = np.array([[]]), thu_grid: np.ndarray = np.array([[]])):
@@ -31,11 +33,11 @@ def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, dens
     Returns
     -------
     np.ndarray
-        empty 2d grid of depth values
+        2d grid of depth values
     np.ndarray
-        empty 2d grid of vertical uncertainty values
+        2d grid of vertical uncertainty values
     np.ndarray
-        empty 2d grid of horizontal uncertainty values
+        2d grid of horizontal uncertainty values
     """
 
     tvu_enabled = False
@@ -93,11 +95,11 @@ def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
     Returns
     -------
     np.ndarray
-        empty 2d grid of depth values
+        2d grid of depth values
     np.ndarray
-        empty 2d grid of vertical uncertainty values
+        2d grid of vertical uncertainty values
     np.ndarray
-        empty 2d grid of horizontal uncertainty values
+        2d grid of horizontal uncertainty values
     """
 
     tvu_enabled = False
@@ -127,6 +129,81 @@ def np_grid_shoalest(depth: np.array, cell_indices: np.array, grid: np.ndarray, 
         thu_grid[urow, ucol] = thu_shoalest
 
     return grid, tvu_grid, thu_grid
+
+
+def nb_cube(x: np.array, y: np.array, depth: np.array, cell_indices: np.array, grid: np.ndarray, density_grid: np.ndarray,
+            tvu: np.array, thu: np.array, tpu_grid: np.ndarray, numhyp_grid: np.ndarray, ratio_grid: np.ndarray,
+            minimum_easting: float, maximum_northing: float, iho_order: str, method: str, grid_resolution_x: float,
+            grid_resolution_y: float, **kwargs):
+    """
+    Run the numba version of the bathycube algorithm
+
+    Parameters
+    ----------
+    x
+        1d x values
+    y
+        1d y values
+    depth
+        1d array of point depth values
+    cell_indices
+        1d index of which cell each point belongs to
+    grid
+        empty 2d grid of depth values
+    density_grid
+        empty 2d grid of density values
+    tvu
+        1d array of point vertical uncertainty values
+    thu
+        1d array of point horizontal uncertainty values
+    tpu_grid
+        empty 2d grid of vertical uncertainty values
+    numhyp_grid
+        empty 2d grid of number of hypotheses values
+    ratio_grid
+        empty 2d grid of hypothesis ratios values
+    minimum_easting
+        minimum easting value of the tile grid
+    maximum_northing
+        maximum northing value of the tile grid
+    iho_order
+        string representation of one of the IHO order categories, i.e. 'special' or 'order1a'
+    method
+        method to use in determining the appropriate hypothesis value.  'local' to use the local spatial
+        context to find the closest node with a single hypothesis and use that hypothesis depth to find the nearest
+        hypothesis in terms of depth in the current node.  'prior' to use the hypothesis with the most points
+        associated with it.  'posterior' to combine both prior and local methods to form an approximate Bayesian
+        posterior distribution.  'predict' to get the hypothesis closest to the predicted depth associated with
+        each node.
+    grid_resolution_x
+        grid resolution in easting (column) direction in meters
+    grid_resolution_y
+        grid resolution in northing (row) direction in meters
+
+    Returns
+    -------
+    np.ndarray
+        2d grid of depth values
+    np.ndarray
+        2d grid of total propagated uncertainty values
+    """
+
+    cell_sort = np.argsort(cell_indices)
+    unique_indices, uidx, ucounts = np.unique(cell_indices[cell_sort], return_index=True, return_counts=True)
+    urow, ucol = np.unravel_index(unique_indices, grid.shape)
+    numrows, numcols = grid.shape
+
+    _dpth_grid, _uncrtainty_grid, _rtio_grid, _nmhyp_grid = run_cube_gridding(depth, thu, tvu, x, y, numcols, numrows,
+                                                                              minimum_easting, maximum_northing, method,
+                                                                              iho_order, grid_resolution_x, grid_resolution_y,
+                                                                              **kwargs)
+    validindex = ~np.isnan(_dpth_grid[::-1, :])
+    grid[validindex] = _dpth_grid[::-1, :][validindex]
+    density_grid[urow, ucol] = ucounts
+    tpu_grid[validindex] = _uncrtainty_grid[::-1, :][validindex]
+    ratio_grid[validindex] = _rtio_grid[::-1, :][validindex]
+    numhyp_grid[validindex] = _nmhyp_grid[::-1, :][validindex]
+    return grid, tpu_grid
 
 
 def calculate_slopes(x: np.array, y: np.array, z: np.array, cell_indices: np.array, cell_edges_x: np.array, cell_edges_y: np.array,

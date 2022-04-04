@@ -4,7 +4,7 @@ from pytest import approx
 from bathygrid.bgrid import *
 from bathygrid.maingrid import *
 from bathygrid.tile import Tile
-from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata, realdata
+from test_data.test_data import smalldata2, smalldata3, deepdata, closedata, smileyface, onlyzdata, realdata, cubedata
 from bathygrid.utilities import utc_seconds_to_formatted_string
 
 
@@ -189,6 +189,27 @@ def test_SRGrid_grid_shoalest():
     assert lyrs[1][848, 0] == 1
     assert lyrs[2][848, 0] == 0.5
     assert lyrs[3][848, 0] == 1.0
+
+
+def test_SRGrid_grid_cube():
+    bg = SRGrid(tile_size=1024)
+    bg.add_points(cubedata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.is_empty
+    assert bg.no_grid
+
+    res = bg.grid(algorithm='cube', resolution=2.0, grid_parameters={'variance_selection': 'cube', 'method': 'local', 'iho_order': 'order1a'})
+    assert not bg.no_grid
+    assert res == [2.0]
+    assert bg.data is None  # after adding we clear the point data to free memory
+    lyrs = bg.get_layers_by_name(['depth', 'density', 'total_uncertainty', 'hypothesis_count', 'hypothesis_ratio'])
+    assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == lyrs[4].size == 262144
+    assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[2])) == np.count_nonzero(lyrs[3]) == np.count_nonzero(~np.isnan(lyrs[4])) == 4
+    assert np.count_nonzero(lyrs[1]) == 6
+    assert lyrs[0][31, 144] == approx(15.293, abs=0.001)
+    assert lyrs[1][31, 144] == 561
+    assert lyrs[2][31, 144] == approx(0.364, abs=0.001)
+    assert lyrs[3][31, 144] == 2
+    assert lyrs[4][31, 144] == approx(4.87, abs=0.001)
 
 
 def test_auto_resolution_methods():

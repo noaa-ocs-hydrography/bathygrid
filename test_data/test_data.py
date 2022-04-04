@@ -261,6 +261,22 @@ realdata['z'] = z
 realdata['tvu'] = tvu
 realdata['thu'] = thu
 
+x = np.linspace(403744, 403747, 50)
+y = np.linspace(4122687, 4122690, 50)
+x, y = np.meshgrid(x, y)
+x = x.flatten()
+y = y.flatten()
+z = np.linspace(10, 20, 2500)
+tvu = np.linspace(0.3, 0.7, 2500)
+thu = np.linspace(0.3, 0.7, 2500)
+dtyp = [('x', np.float64), ('y', np.float64), ('z', np.float32), ('tvu', np.float32), ('thu', np.float32)]
+cubedata = np.empty(len(x), dtype=dtyp)
+cubedata['x'] = x
+cubedata['y'] = y
+cubedata['z'] = z
+cubedata['tvu'] = tvu
+cubedata['thu'] = thu
+
 
 def get_grid_data():
     depth = np.linspace(10, 20, 20)
@@ -272,6 +288,24 @@ def get_grid_data():
     tvugrid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
     thugrid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
     return depth, tvu, thu, cell_indices, grid, density_grid, tvugrid, thugrid
+
+
+def get_cube_grid_data():
+    x = np.linspace(403744, 403746, 50)
+    y = np.linspace(4122687, 4122690, 50)
+    x, y = np.meshgrid(x, y)
+    x = x.flatten()
+    y = y.flatten()
+    depth = np.linspace(10, 20, 2500)
+    tvu = np.linspace(0.3, 0.7, 2500)
+    thu = np.linspace(0.3, 0.7, 2500)
+    cell_indices = np.linspace(0, 8, 1000).astype(int)
+    grid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
+    density_grid = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+    numhyp_grid = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]])
+    tpugrid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
+    ratiogrid = np.array([[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]])
+    return x, y, depth, tvu, thu, cell_indices, grid, density_grid, numhyp_grid, tpugrid, ratiogrid
 
 
 def get_test_path():
