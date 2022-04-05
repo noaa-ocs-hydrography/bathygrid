@@ -1992,8 +1992,8 @@ class OperationalGrid(BathyGrid):
                        'VAR_OTHER_CONSTRAINTS=' + other_constraints, 'VAR_CLASSIFICATION=' + classification,
                        'VAR_SECURITY_USER_NOTE=' + security_user_note]
 
-        lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
-                         'total_uncertainty': 'Total Uncertainty', 'horizontal_uncertainty': 'Horizontal Uncertainty', 'intensity': 'Intensity'}
+        lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Uncertainty',
+                         'total_uncertainty': 'Uncertainty', 'horizontal_uncertainty': 'Horizontal Uncertainty', 'intensity': 'Intensity'}
         nodatavalue = 1000000.0
         z_positive_up = True
         basefile, baseext = os.path.splitext(filepath)
