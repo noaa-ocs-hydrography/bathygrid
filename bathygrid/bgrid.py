@@ -773,6 +773,51 @@ class BathyGrid(BaseGrid):
 
         return total_x.ravel(), total_y.ravel()
 
+    def get_tile_neighbors(self, til: Tile):
+        til_row, til_column = np.where(self.tiles == til)
+        tils = []
+        # up
+        try:
+            tils.append(self.tiles[til_row - 1, til_column][0])
+        except:
+            tils.append(None)
+        # right
+        try:
+            tils.append(self.tiles[til_row, til_column + 1][0])
+        except:
+            tils.append(None)
+        # down
+        try:
+            tils.append(self.tiles[til_row + 1, til_column][0])
+        except:
+            tils.append(None)
+        # left
+        try:
+            tils.append(self.tiles[til_row, til_column - 1][0])
+        except:
+            tils.append(None)
+        return tils
+
+    def get_tile_neighbor_points(self, til: Tile, buffer_value: float):
+        data = []
+        tils = self.get_tile_neighbors(til)
+        # up
+        if tils[0]:
+            newdata = tils[0].data[tils[0].data['y'] >= (tils[0].max_y - buffer_value)]
+            data.append(newdata)
+        if tils[1]:
+            newdata = tils[1].data[tils[1].data['x'] <= (tils[1].min_x + buffer_value)]
+            data.append(newdata)
+        if tils[2]:
+            newdata = tils[2].data[tils[2].data['y'] <= (tils[2].min_y + buffer_value)]
+            data.append(newdata)
+        if tils[3]:
+            newdata = tils[3].data[tils[3].data['x'] >= (tils[3].max_x - buffer_value)]
+            data.append(newdata)
+        if data:
+            data = np.concatenate(data)
+        return data
+
     def _finalize_chunk(self, column_indices: list, row_indices: list, cells_per_tile: int, layers: list, layerdata: list,
                         nodatavalue: float, for_gdal: bool = True):
         """
@@ -1025,12 +1070,22 @@ class BathyGrid(BaseGrid):
                             if rz not in self.resolutions:
                                 self.resolutions.append(rz)
                         continue
+                if isinstance(tile, Tile) and algorithm == 'cube':
+                    if auto_resolution:
+                        border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
+                    else:
+                        border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
+                else:
+                    border_data = None
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
                                     grid_parameters=self.grid_parameters)
                 elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                                    grid_parameters=self.grid_parameters)
+                                    grid_parameters=self.grid_parameters, border_data=border_data)
+                elif isinstance(tile, Tile):  # make sure that the tile gets the border_data
+                    rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
+                                    grid_parameters=self.grid_parameters, border_data=border_data)
                 else:
                     rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
                                     grid_parameters=self.grid_parameters)
@@ -1598,15 +1653,25 @@ def _gridding_parallel(data_blob: list):
     Gridding routine suited for running in parallel using the dask cluster.
     """
     tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name, grid_parameters = data_blob
+    if isinstance(tile, Tile) and algorithm == 'cube':
+        if auto_resolution:
+            border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
+        else:
+            border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
+    else:
+        border_data = None
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters)
-    elif isinstance(tile, SRTile) and auto_resolution and grid_name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
+                        grid_parameters=self.grid_parameters)
+    elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters)
+                        grid_parameters=self.grid_parameters, border_data=border_data)
+    elif isinstance(tile, Tile):  # make sure that the tile gets the border_data
+        rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
+                        grid_parameters=self.grid_parameters, border_data=border_data)
     else:
         rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters)
+                        grid_parameters=self.grid_parameters)
     return rez, tile
 
 
@@ -1759,7 +1824,11 @@ class OperationalGrid(BathyGrid):
     def __repr__(self):
         base_output = super().__repr__()
         output = 'Time of Data (UTC): {} to {}\n'.format(self.min_time, self.max_time)
-        output += 'EPSG: {}\n'.format(self.epsg)
+        try:
+            epsg_name = CRS.from_epsg(int(self.epsg)).name
+        except:
+            epsg_name = 'Unknown'
+        output += 'EPSG: {} ({})\n'.format(self.epsg, epsg_name)
         output += 'Path: {}\n'.format(self.output_folder)
         output += base_output
         return output
