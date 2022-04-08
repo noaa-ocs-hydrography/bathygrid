@@ -205,11 +205,11 @@ def test_SRGrid_grid_cube():
     assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == lyrs[4].size == 262144
     assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[2])) == np.count_nonzero(lyrs[3]) == np.count_nonzero(~np.isnan(lyrs[4])) == 4
     assert np.count_nonzero(lyrs[1]) == 6
-    assert lyrs[0][31, 144] == approx(15.293, abs=0.001)
+    assert lyrs[0][31, 144] == approx(10.784, abs=0.001)
     assert lyrs[1][31, 144] == 561
-    assert lyrs[2][31, 144] == approx(0.364, abs=0.001)
-    assert lyrs[3][31, 144] == 2
-    assert lyrs[4][31, 144] == approx(4.87, abs=0.001)
+    assert lyrs[2][31, 144] == approx(0.125, abs=0.001)
+    assert lyrs[3][31, 144] == 1
+    assert lyrs[4][31, 144] == approx(0.0, abs=0.001)
 
 
 def test_auto_resolution_methods():
@@ -693,6 +693,30 @@ def test_layer_values_at_xy():
     assert outofboundscheck[1:3] == approx(np.array([612.5, 2605.432]), 0.001)
     assert np.isnan(outofboundscheck[0])
     assert np.isnan(outofboundscheck[3])
+
+
+def test_get_tile_neighbors():
+    bg = SRGridZarr(tile_size=16)  # small tile size just to ensure this works with multiple tiles
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    til = bg.tiles[1, 1]
+    neighbors = bg.get_tile_neighbors(til)
+
+    assert neighbors[0] == bg.tiles[0, 1]
+    assert neighbors[1] == None
+    assert neighbors[2] == None
+    assert neighbors[3] == bg.tiles[1, 0]
+
+
+def test_get_tile_neighbor_points():
+    bg = SRGridZarr(tile_size=16)  # small tile size just to ensure this works with multiple tiles
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    til = bg.tiles[1, 1]
+    neighbordata = bg.get_tile_neighbor_points(til, 1)
+
+    assert (neighbordata['x'] > til.min_x - 1).all()
+    assert (neighbordata['x'] < til.max_x + 1).all()
+    assert (neighbordata['y'] > til.min_y - 1).all()
+    assert (neighbordata['y'] < til.max_y + 1).all()
 
 
 def test_density_properties():

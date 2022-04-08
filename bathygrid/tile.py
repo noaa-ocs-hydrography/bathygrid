@@ -394,13 +394,13 @@ class SRTile(Tile):
             cindx = cindx.compute()
         return vert_val, horiz_val, depth_val, vert_grid, horiz_grid, cindx
 
-    def _cube_grid_algorithm_initialize(self, resolution: float, only_container: str = None):
-        if not isinstance(self.data, np.ndarray):
-            vert_val = self.data['tvu'].compute()
-            horiz_val = self.data['thu'].compute()
+    def _cube_grid_algorithm_initialize(self, data: np.ndarray, resolution: float, only_container: str = None):
+        if not isinstance(data, np.ndarray):
+            vert_val = data['tvu'].compute()
+            horiz_val = data['thu'].compute()
         else:
-            vert_val = self.data['tvu']
-            horiz_val = self.data['thu']
+            vert_val = data['tvu']
+            horiz_val = data['thu']
 
         if not only_container:
             totalunc_grid = self.cells[resolution]['total_uncertainty']
@@ -412,12 +412,12 @@ class SRTile(Tile):
             hypratio_grid = np.array([])
 
         if only_container:
-            depth_val = self.data['z'][self.container[only_container][0]:self.container[only_container][1]]
+            depth_val = data['z'][self.container[only_container][0]:self.container[only_container][1]]
             self.cells[resolution][only_container] = np.full(self.cells[resolution][self.depth_key].shape, np.float32(np.nan), dtype=np.float32)
             self.cells[resolution][only_container + '_density'] = np.full(self.cells[resolution][self.depth_key].shape, 0, dtype=int)
         else:
-            depth_val = self.data['z']
-        if not isinstance(self.data, np.ndarray):
+            depth_val = data['z']
+        if not isinstance(data, np.ndarray):
             depth_val = depth_val.compute()
 
         if only_container:
@@ -462,14 +462,19 @@ class SRTile(Tile):
             np_grid_shoalest(depth_val, cindx, self.cells[resolution][only_container], self.cells[resolution][only_container + '_density'], vert_val, horiz_val, vert_grid, horiz_grid)
             self.cells[resolution][only_container] = np.round(self.cells[resolution][only_container], 3)
 
-    def _run_cube_grid(self, resolution: float, grid_parameters: dict = float, only_container: str = None):
-        vert_val, horiz_val, depth_val, totalunc_grid, hypcnt_grid, hypratio_grid, cindx = self._cube_grid_algorithm_initialize(resolution, only_container=only_container)
-        if not isinstance(self.data, np.ndarray):
-            x_val = self.data['x'].compute()
-            y_val = self.data['y'].compute()
+    def _run_cube_grid(self, resolution: float, grid_parameters: dict = float, only_container: str = None, border_data: np.ndarray = None):
+        if border_data is not None:
+            data = np.concatenate([self.data, border_data])
         else:
-            x_val = self.data['x']
-            y_val = self.data['y']
+            data = self.data
+        vert_val, horiz_val, depth_val, totalunc_grid, hypcnt_grid, hypratio_grid, cindx = self._cube_grid_algorithm_initialize(data, resolution, only_container=only_container)
+        if not isinstance(data, np.ndarray):
+            x_val = data['x'].compute()
+            y_val = data['y'].compute()
+        else:
+            x_val = data['x']
+            y_val = data['y']
+
         if grid_parameters and 'method' in grid_parameters:
             grid_method = grid_parameters['method']
         else:
@@ -679,7 +684,7 @@ class SRTile(Tile):
         return final_rez
 
     def grid(self, algorithm: str, resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
-             regrid_option: str = '', progress_bar: bool = False, grid_parameters: dict = None):
+             regrid_option: str = '', progress_bar: bool = False, grid_parameters: dict = None, border_data: np.ndarray = None):
         """
         Grid the Tile data using the provided algorithm and resolution.  Stores the gridded data in the Tile
 
@@ -699,6 +704,8 @@ class SRTile(Tile):
             a place holder to match the bgrid grid method
         grid_parameters
             optional dict of settings to pass to the grid algorithm
+        border_data
+            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues
 
         Returns
         -------
@@ -757,7 +764,7 @@ class SRTile(Tile):
         elif algorithm == 'shoalest':
             self._run_shoalest_grid(resolution)
         elif algorithm == 'cube':
-            self._run_cube_grid(resolution, grid_parameters)
+            self._run_cube_grid(resolution, grid_parameters, border_data=border_data)
         self.point_count_changed = False
         return resolution
 
