@@ -205,11 +205,11 @@ def test_SRGrid_grid_cube():
     assert lyrs[0].size == lyrs[1].size == lyrs[2].size == lyrs[3].size == lyrs[4].size == 262144
     assert np.count_nonzero(~np.isnan(lyrs[0])) == np.count_nonzero(~np.isnan(lyrs[2])) == np.count_nonzero(lyrs[3]) == np.count_nonzero(~np.isnan(lyrs[4])) == 4
     assert np.count_nonzero(lyrs[1]) == 6
-    assert lyrs[0][31, 144] == approx(15.293, abs=0.001)
+    assert lyrs[0][31, 144] == approx(10.784, abs=0.001)
     assert lyrs[1][31, 144] == 561
-    assert lyrs[2][31, 144] == approx(0.364, abs=0.001)
-    assert lyrs[3][31, 144] == 2
-    assert lyrs[4][31, 144] == approx(4.87, abs=0.001)
+    assert lyrs[2][31, 144] == approx(0.125, abs=0.001)
+    assert lyrs[3][31, 144] == 1
+    assert lyrs[4][31, 144] == approx(0.0, abs=0.001)
 
 
 def test_auto_resolution_methods():

@@ -151,15 +151,15 @@ def test_nb_cube():
     nb_cube(x, y, depth, cell_indices, grid, density_grid, tvu, thu, tpugrid, numhyp_grid, ratiogrid, min(x), max(y),
             'order1a', 'local', resolution_x, resolution_y)
 
-    assert grid[0][0] == approx(13.474, abs=0.001)
-    assert grid[0][1] == approx(13.528, abs=0.001)
-    assert grid[0][2] == approx(13.602, abs=0.001)
-    assert grid[1][0] == approx(16.766, abs=0.001)
-    assert grid[1][1] == approx(16.814, abs=0.001)
-    assert grid[1][2] == approx(16.880, abs=0.001)
-    assert grid[2][0] == approx(18.771, abs=0.001)
-    assert grid[2][1] == approx(18.827, abs=0.001)
-    assert grid[2][2] == approx(18.860, abs=0.001)
+    assert grid[0][0] == approx(11.824, abs=0.001)
+    assert grid[0][1] == approx(11.928, abs=0.001)
+    assert grid[0][2] == approx(12.148, abs=0.001)
+    assert grid[1][0] == approx(15.116, abs=0.001)
+    assert grid[1][1] == approx(15.192, abs=0.001)
+    assert grid[1][2] == approx(15.379, abs=0.001)
+    assert grid[2][0] == approx(17.912, abs=0.001)
+    assert grid[2][1] == approx(17.972, abs=0.001)
+    assert grid[2][2] == approx(18.353, abs=0.001)
 
     assert density_grid[0][0] == 125
     assert density_grid[0][1] == 125
@@ -181,15 +181,15 @@ def test_nb_cube():
     assert numhyp_grid[2][1] == 1
     assert numhyp_grid[2][2] == 1
 
-    assert tpugrid[0][0] == approx(0.114, abs=0.001)
-    assert tpugrid[0][1] == approx(0.081, abs=0.001)
-    assert tpugrid[0][2] == approx(0.113, abs=0.001)
-    assert tpugrid[1][0] == approx(0.114, abs=0.001)
-    assert tpugrid[1][1] == approx(0.0815, abs=0.001)
-    assert tpugrid[1][2] == approx(0.114, abs=0.001)
-    assert tpugrid[2][0] == approx(0.165, abs=0.001)
-    assert tpugrid[2][1] == approx(0.118, abs=0.001)
-    assert tpugrid[2][2] == approx(0.166, abs=0.001)
+    assert tpugrid[0][0] == approx(0.109, abs=0.001)
+    assert tpugrid[0][1] == approx(0.109, abs=0.001)
+    assert tpugrid[0][2] == approx(0.663, abs=0.001)
+    assert tpugrid[1][0] == approx(0.116, abs=0.001)
+    assert tpugrid[1][1] == approx(0.116, abs=0.001)
+    assert tpugrid[1][2] == approx(0.349, abs=0.001)
+    assert tpugrid[2][0] == approx(0.135, abs=0.001)
+    assert tpugrid[2][1] == approx(0.136, abs=0.001)
+    assert tpugrid[2][2] == approx(0.313, abs=0.001)
 
     assert ratiogrid[0][0] == 0.0
     assert ratiogrid[0][1] == 0.0

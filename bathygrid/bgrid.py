@@ -1214,7 +1214,14 @@ class BathyGrid(BaseGrid):
                 if self.sub_type in ['srtile', 'quadtile']:
                     self._load_tile_data_to_memory(tile)
                 tile_indices.append(cnt)
-                data_for_workers.append([tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, self.name, self.grid_parameters])
+                if isinstance(tile, Tile) and algorithm == 'cube':
+                    if auto_resolution:
+                        border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
+                    else:
+                        border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
+                else:
+                    border_data = None
+                data_for_workers.append([tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, self.name, self.grid_parameters, border_data])
                 chunk_index += 1
                 if chunk_index == chunks_at_a_time:
                     print('processing surface: group {} out of {}'.format(cur_run, total_runs))
@@ -1690,26 +1697,20 @@ def _gridding_parallel(data_blob: list):
     """
     Gridding routine suited for running in parallel using the dask cluster.
     """
-    tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name, grid_parameters = data_blob
-    if isinstance(tile, Tile) and algorithm == 'cube':
-        if auto_resolution:
-            border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
-        else:
-            border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
-    else:
-        border_data = None
+    tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, grid_name, grid_parameters, border_data = data_blob
+
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=self.grid_parameters)
-    elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
+                        grid_parameters=grid_parameters)
+    elif isinstance(tile, SRTile) and auto_resolution and grid_name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=self.grid_parameters, border_data=border_data)
+                        grid_parameters=grid_parameters, border_data=border_data)
     elif isinstance(tile, Tile):  # make sure that the tile gets the border_data
         rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=self.grid_parameters, border_data=border_data)
+                        grid_parameters=grid_parameters, border_data=border_data)
     else:
         rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=self.grid_parameters)
+                        grid_parameters=grid_parameters)
     return rez, tile
 
 
