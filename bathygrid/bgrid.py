@@ -816,6 +816,12 @@ class BathyGrid(BaseGrid):
             data.append(newdata)
         if data:
             data = np.concatenate(data)
+            if not isinstance(data, np.ndarray):
+                data = data.compute()
+            if data.size == 0:
+                data = None
+        else:
+            data = None
         return data
 
     def _finalize_chunk(self, column_indices: list, row_indices: list, cells_per_tile: int, layers: list, layerdata: list,
