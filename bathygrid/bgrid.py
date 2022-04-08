@@ -774,6 +774,21 @@ class BathyGrid(BaseGrid):
         return total_x.ravel(), total_y.ravel()
 
     def get_tile_neighbors(self, til: Tile):
+        """
+        Return a list of Tile objects for the neighbors to the provided tile.  Neighbors will be in order of [above, right,
+        down, left] in the returned list.
+
+        Parameters
+        ----------
+        til
+            Tile that you want to find the neighbors for
+
+        Returns
+        -------
+        list
+            list of neighbor Tiles
+        """
+
         til_row, til_column = np.where(self.tiles == til)
         tils = []
         # up
@@ -799,6 +814,23 @@ class BathyGrid(BaseGrid):
         return tils
 
     def get_tile_neighbor_points(self, til: Tile, buffer_value: float):
+        """
+        Get the point data for all points that are in neighboring tiles to the provided tile and are within the buffer value
+        from the tile border.
+
+        Parameters
+        ----------
+        til
+            Tile that you want to find the neighbor points for
+        buffer_value
+            offset in meters that you want to use to find the points in the neighboring tiles
+
+        Returns
+        -------
+        numpy.ndarray
+            point data for the neighboring tiles
+        """
+
         data = []
         tils = self.get_tile_neighbors(til)
         # up
