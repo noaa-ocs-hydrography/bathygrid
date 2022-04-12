@@ -3,7 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from bathycube.numba_cube import run_cube_gridding
+try:
+    from bathycube.numba_cube import run_cube_gridding
+    cube_enabled = True
+except ImportError:
+    cube_enabled = False
 
 
 def np_grid_mean(depth: np.array, cell_indices: np.array, grid: np.ndarray, density_grid: np.ndarray, tvu: np.array = np.array([]),
@@ -188,6 +192,8 @@ def nb_cube(x: np.array, y: np.array, depth: np.array, cell_indices: np.array, g
         2d grid of total propagated uncertainty values
     """
 
+    if not cube_enabled:
+        raise EnvironmentError('nb_cube: bathycube module not found!')
     cell_sort = np.argsort(cell_indices)
     unique_indices, uidx, ucounts = np.unique(cell_indices[cell_sort], return_index=True, return_counts=True)
     urow, ucol = np.unravel_index(unique_indices, grid.shape)
