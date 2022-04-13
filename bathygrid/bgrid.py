@@ -732,20 +732,63 @@ class BathyGrid(BaseGrid):
             layer = [layer]
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
-                col, row = self._tile_idx_to_row_col(cnt)
-                tile_cell_count = self.tile_size / resolution
-                assert tile_cell_count.is_integer()
-                tile_cell_count = int(tile_cell_count)
-                data_col, data_row = col * tile_cell_count, row * tile_cell_count
-                geo = tile.get_geotransform(resolution)
-                data = {}
-                for cnt, lyr in enumerate(layer):
-                    newdata = tile.get_layers_by_name(lyr, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
-                    if newdata is not None:
-                        if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
-                            newdata = newdata[0]
-                        data[lyr] = newdata
+                row, col = self._tile_idx_to_row_col(cnt)
+                tile, data, geo, data_col, data_row, tile_cell_count = self.get_tile_data(row, col, resolution, layer, nodatavalue, z_positive_up)
                 yield geo, data_col, data_row, tile_cell_count, data
+
+    def get_tile_data(self, row_number: int, column_number: int, resolution: float, layer: Union[str, list] = 'depth',
+                      nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False):
+        """
+        Get the data and relevant information for the tile at the provided row/column number.  If the tile is a subgrid
+        (vr grids have grids as tiles), this will return the data for that subgrid.
+
+        Parameters
+        ----------
+        row_number
+            row number of the desired tile
+        column_number
+            column number of the desired tile
+        resolution
+            resolution of the layer we want to access, if not provided will use the first resolution found, will error if there is
+            more than one resolution in the grid
+        layer
+            string identifier for the layer(s) to access, valid layers include 'depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty',
+            'hypothesis_ratio
+        nodatavalue
+            nodatavalue to set in the regular grid
+        z_positive_up
+            if True, will output bands with positive up convention
+
+        Returns
+        -------
+        Union[Tile,BathyGrid]
+            Tile or Grid at the given row column index
+        dict
+            tile layer data for the given resolution
+        list
+            [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size] for the given tile
+        int
+            column index in terms of cell count
+        int
+            row index in terms of cell count
+        int
+            width of the tile in number of cells
+        """
+
+        tile = self.tiles[row_number, column_number]
+        tile_cell_count = self.tile_size / resolution
+        assert tile_cell_count.is_integer()
+        tile_cell_count = int(tile_cell_count)
+        data_col, data_row = row_number * tile_cell_count, column_number * tile_cell_count
+        geo = tile.get_geotransform(resolution)
+        data = {}
+        for cnt, lyr in enumerate(layer):
+            newdata = tile.get_layers_by_name(lyr, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
+            if newdata is not None:
+                if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
+                    newdata = newdata[0]
+                data[lyr] = newdata
+        return tile, data, geo, data_col, data_row, tile_cell_count
 
     def get_tile_boundaries(self):
         """
@@ -1028,18 +1071,11 @@ class BathyGrid(BaseGrid):
         data = [self._build_layer_grid(resolution, layername=lyr, nodatavalue=nodatavalue) for lyr in layer]
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
-                col, row = self._tile_idx_to_row_col(cnt)
-                tile_cell_count = self.tile_size / resolution
-                assert tile_cell_count.is_integer()
-                tile_cell_count = int(tile_cell_count)
-                data_col, data_row = col * tile_cell_count, row * tile_cell_count
-                for cnt, lyr in enumerate(layer):
-                    newdata = tile.get_layers_by_name(lyr, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
-                    if newdata is not None:
-                        if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
-                            newdata = newdata[0]
-                        data[cnt][data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = newdata
-                        empty = False
+                row, col = self._tile_idx_to_row_col(cnt)
+                tile, data, geo, data_col, data_row, tile_cell_count = self.get_tile_data(row, col, resolution, layer, nodatavalue, z_positive_up)
+                for cnt, lyr in enumerate(data.keys()):
+                    data[cnt][data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = data[lyr]
+                    empty = False
         if empty:
             data = None
         return data
