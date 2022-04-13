@@ -268,6 +268,12 @@ class BathyGrid(BaseGrid):
                         return True
         return False
 
+    @property
+    def positive_up(self):
+        if self.vertical_reference.find('height (h)",up') > -1:
+            return True
+        return False
+
     def get_geotransform(self, resolution: float):
         """
         Return the summation of the geotransforms for all tiles in this grid and a place holder for tile count
@@ -710,6 +716,11 @@ class BathyGrid(BaseGrid):
             if True, will output bands with positive up convention
         """
 
+        if self.positive_up:
+            if z_positive_up:  # this is already positive up/height, so switch this off
+                z_positive_up = False
+            else:  # this is a positive up/height, so switch this on to flip the z convention of the returned data
+                z_positive_up = True
         if not resolution:
             if len(self.resolutions) > 1:
                 raise ValueError(
@@ -1000,6 +1011,12 @@ class BathyGrid(BaseGrid):
         # ensure nodatavalue is a float32
         nodatavalue = np.float32(nodatavalue)
         empty = True
+        if self.positive_up:
+            if z_positive_up:  # this is already positive up/height, so switch this off
+                z_positive_up = False
+            else:  # this is a positive up/height, so switch this on to flip the z convention of the returned data
+                z_positive_up = True
+
         if isinstance(layer, str):
             layer = [layer]
         if self.no_grid:
@@ -2013,7 +2030,8 @@ class OperationalGrid(BathyGrid):
             dfmt = ['%.3f', '%.3f']
             for cnt, lname in enumerate(lyrs):
                 if lname == 'depth' and z_positive_up:
-                    lyrdata[cnt] = lyrdata[cnt] * -1
+                    if self.mean_depth > 0:  # currently positive down
+                        lyrdata[cnt] = lyrdata[cnt] * -1
                     lname = 'elevation'
                 dataset += [lyrdata[cnt].ravel()]
                 dnames += [lname]
