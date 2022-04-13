@@ -270,8 +270,11 @@ class BathyGrid(BaseGrid):
 
     @property
     def positive_up(self):
-        if self.vertical_reference.find('height (h)",up') > -1:
-            return True
+        if self.vertical_reference:
+            if self.vertical_reference.find('height (h)",up') > -1:
+                return True
+            else:
+                return False
         return False
 
     def get_geotransform(self, resolution: float):
@@ -1072,9 +1075,9 @@ class BathyGrid(BaseGrid):
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
                 row, col = self._tile_idx_to_row_col(cnt)
-                tile, data, geo, data_col, data_row, tile_cell_count = self.get_tile_data(row, col, resolution, layer, nodatavalue, z_positive_up)
-                for cnt, lyr in enumerate(data.keys()):
-                    data[cnt][data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = data[lyr]
+                tile, newdata, geo, data_col, data_row, tile_cell_count = self.get_tile_data(row, col, resolution, layer, nodatavalue, z_positive_up)
+                for cnt, lyr in enumerate(newdata.keys()):
+                    data[cnt][data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = newdata[lyr]
                     empty = False
         if empty:
             data = None
