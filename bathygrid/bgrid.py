@@ -719,11 +719,6 @@ class BathyGrid(BaseGrid):
             if True, will output bands with positive up convention
         """
 
-        if self.positive_up:
-            if z_positive_up:  # this is already positive up/height, so switch this off
-                z_positive_up = False
-            else:  # this is a positive up/height, so switch this on to flip the z convention of the returned data
-                z_positive_up = True
         if not resolution:
             if len(self.resolutions) > 1:
                 raise ValueError(
@@ -744,6 +739,8 @@ class BathyGrid(BaseGrid):
         """
         Get the data and relevant information for the tile at the provided row/column number.  If the tile is a subgrid
         (vr grids have grids as tiles), this will return the data for that subgrid.
+
+        You should use this method to access a tile, will also allow you to alter the z sign convention.
 
         Parameters
         ----------
@@ -777,6 +774,12 @@ class BathyGrid(BaseGrid):
         int
             width of the tile in number of cells
         """
+
+        if self.positive_up:
+            if z_positive_up:  # this is already positive up/height, so switch this off
+                z_positive_up = False
+            else:  # this is a positive up/height, so switch this on to flip the z convention of the returned data
+                z_positive_up = True
 
         tile = self.tiles[row_number, column_number]
         tile_cell_count = self.tile_size / resolution
@@ -1122,12 +1125,6 @@ class BathyGrid(BaseGrid):
         # ensure nodatavalue is a float32
         nodatavalue = np.float32(nodatavalue)
         empty = True
-        if self.positive_up:
-            if z_positive_up:  # this is already positive up/height, so switch this off
-                z_positive_up = False
-            else:  # this is a positive up/height, so switch this on to flip the z convention of the returned data
-                z_positive_up = True
-
         if isinstance(layer, str):
             layer = [layer]
         if self.no_grid:
