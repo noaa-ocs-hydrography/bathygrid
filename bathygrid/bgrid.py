@@ -964,6 +964,23 @@ class BathyGrid(BaseGrid):
         return finaldata
 
     def _split_to_approx_shape(self, arr: np.ndarray, chunk_shape: tuple):
+        """
+        Take a 2d array and split it up into chunk_shape sized chunks.  We then return the != None values in the array
+        to get the list of lists of values.
+
+        Parameters
+        ----------
+        arr
+            2d array
+        chunk_shape
+            size of the desired chunk, (row_dimension, column_dimension)
+
+        Returns
+        -------
+        list
+            list of lists of the values in each non-None cell
+        """
+
         if arr.ndim != 2 or len(chunk_shape) != 2:
             raise NotImplementedError('_split_to_approx_shape: assumes two dimensions')
 
@@ -987,19 +1004,25 @@ class BathyGrid(BaseGrid):
                     chnks.append(split_b[valid].tolist())
         return chnks
 
-    def _tile_chunk_indices(self, maximum_chunk_dimension: float = None):
+    def _tile_chunk_indices(self, max_chunk_dimension: float = None):
         """
-        
+        In order to return chunks of tiles in get_chunks_of_tiles, we need to figure out the tile indices of the tiles
+        that are in each chunk.  We take a max chunk dimension, split our grid into chunks of grids, and return a list of
+        the row,column indices for each real tile in that grid.
+
         Parameters
         ----------
-        maximum_chunk_dimension
+        max_chunk_dimension
+            size of the chunk, used for both dimensions, i.e. maxchunkdimension=2, chunk shape = (2,2)
 
         Returns
         -------
-
+        list
+            list of lists of row column indices for each real tile in each chunk
         """
-        # ensure we get at least one tile, but pick the number of tiles that gets us less than or equal to maximum_chunk_dimension
-        max_length = max(int(np.floor(maximum_chunk_dimension / self.tile_size)), 1)
+
+        # ensure we get at least one tile, but pick the number of tiles that gets us less than or equal to max_chunk_dimension
+        max_length = max(int(np.floor(max_chunk_dimension / self.tile_size)), 1)
         chunk_shape = (max_length, max_length)
 
         tindex = np.full_like(self.tiles, None)

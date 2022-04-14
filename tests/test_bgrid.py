@@ -611,8 +611,8 @@ def test_get_chunks_of_tiles():
         testfinalgeo.append(geo)
         testfinalmaxdim.append(max_dimension)
     assert testfinalmaxdim[0] == 2048.0
-    assert testfinalgeo[0] == [0.0, 64.0, 0, 50176.0, 0, -64.0]
-    assert testfinaldata[0]['depth'].shape == (32, 16)
+    assert testfinalgeo[0] == [0.0, 64.0, 0, 51200.0, 0, -64.0]
+    assert testfinaldata[0]['depth'].shape == (32, 32)
 
     bg = VRGridTile(tile_size=1024, subtile_size=128)
     bg.add_points(smalldata2, 'test1', ['line1', 'line2'], 26917, 'waterline')
@@ -637,8 +637,8 @@ def test_get_chunks_of_tiles():
         testfinalgeo.append(geo)
         testfinalmaxdim.append(max_dimension)
     assert testfinalmaxdim[0] == 2048.0
-    assert testfinalgeo[0] == [0.0, 64.0, 0, 50176.0, 0, -64.0]
-    assert testfinaldata[0]['depth'].shape == (32, 16)
+    assert testfinalgeo[0] == [0.0, 64.0, 0, 51200.0, 0, -64.0]
+    assert testfinaldata[0]['depth'].shape == (32, 32)
 
 
 def test_layer_values_at_xy():
