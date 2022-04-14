@@ -963,6 +963,55 @@ class BathyGrid(BaseGrid):
                 finaldata[lyr] = np.fliplr(finaldata[lyr].T)
         return finaldata
 
+    def _split_to_approx_shape(self, arr: np.ndarray, chunk_shape: tuple):
+        if arr.ndim != 2 or len(chunk_shape) != 2:
+            raise NotImplementedError('_split_to_approx_shape: assumes two dimensions')
+
+        if chunk_shape >= arr.shape:
+            valid = arr != None
+            if valid.any():
+                return [arr[valid].tolist()]
+            else:
+                return []
+
+        num_sections = int(np.ceil(arr.shape[0] / chunk_shape[0]))
+        row_split = np.array_split(arr, num_sections, axis=0)
+        num_col_sections = int(np.ceil(row_split[0].shape[1] / chunk_shape[1]))
+
+        chnks = []
+        for split_a in row_split:
+            col_split = np.array_split(split_a, num_col_sections, axis=1)
+            for split_b in col_split:
+                valid = split_b != None
+                if valid.any():
+                    chnks.append(split_b[valid].tolist())
+        return chnks
+
+    def _tile_chunk_indices(self, maximum_chunk_dimension: float = None):
+        """
+        
+        Parameters
+        ----------
+        maximum_chunk_dimension
+
+        Returns
+        -------
+
+        """
+        # ensure we get at least one tile, but pick the number of tiles that gets us less than or equal to maximum_chunk_dimension
+        max_length = max(int(np.floor(maximum_chunk_dimension / self.tile_size)), 1)
+        chunk_shape = (max_length, max_length)
+
+        tindex = np.full_like(self.tiles, None)
+        tloc = np.where(self.tiles != None)
+        tindex[tloc] = np.column_stack(tloc).tolist()
+
+        tile_rows, tile_columns = tloc
+        min_tile_row, min_tile_column = min(tile_rows), min(tile_columns)
+        max_tile_row, max_tile_column = max(tile_rows), max(tile_columns)
+        tindex = tindex[min_tile_row:max_tile_row + 1, min_tile_column:max_tile_column + 1]
+        return self._split_to_approx_shape(tindex, chunk_shape)
+
     def get_chunks_of_tiles(self, resolution: float = None, layer: Union[str, list] = 'depth',
                             nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False,
                             override_maximum_chunk_dimension: float = None, for_gdal: bool = True):
@@ -995,41 +1044,34 @@ class BathyGrid(BaseGrid):
         if isinstance(layer, str):
             layer = [layer]
         if override_maximum_chunk_dimension:
-            max_width = override_maximum_chunk_dimension
+            max_dimension = override_maximum_chunk_dimension
         else:
-            max_width = maximum_chunk_dimension
-        curmaxdimension = 0
-        curgeo = None
-        curdata = []
-        curdcol = []
-        curdrow = []
-        curcellcount = []
-        for geo, data_col, data_row, tile_cell_count, tdata in self.get_tiles_by_resolution(resolution, layer,
-                                                                                            nodatavalue=nodatavalue, z_positive_up=z_positive_up):
-            if curmaxdimension >= max_width:
-                assert all(curcellcount)  # all the tile counts per tile should be the same for the one resolution
-                finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue, for_gdal)
-                yield curgeo, curmaxdimension, finaldata
-                curgeo = None
-                curdata = []
-                curdcol = []
-                curdrow = []
-                curcellcount = []
-
-            curdata.append(tdata)
-            curdcol.append(data_col)
-            curdrow.append(data_row)
-            curcellcount.append(tile_cell_count)
-            if curgeo is None:
-                curgeo = geo
-            else:
-                # merge the georeference of the two datasets, everything remains the same except the origin, which is now the global origin
-                curgeo = [min([curgeo[0], geo[0]]), curgeo[1], curgeo[2], max([curgeo[3], geo[3]]), curgeo[4], curgeo[5]]
-            # here we take the greatest dimension currently to see if we are big enough to stop the chunk
-            curmaxdimension = max((max(curdcol) - min(curdcol) + tile_cell_count) * resolution, (max(curdrow) - min(curdrow) + tile_cell_count) * resolution)
-        assert all(curcellcount)  # all the cell counts per tile should be the same for the one resolution
-        finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue)
-        yield curgeo, curmaxdimension, finaldata
+            max_dimension = maximum_chunk_dimension
+        tile_indices = self._tile_chunk_indices(max_dimension)
+        for index_list in tile_indices:
+            curgeo = None
+            curdata = []
+            curdcol = []
+            curdrow = []
+            curcellcount = []
+            curmaxdimension = 0
+            for trow, tcol in index_list:
+                tile, data, geo, data_col, data_row, tile_cell_count = self.get_tile_data(trow, tcol, resolution, layer, nodatavalue, z_positive_up)
+                curdata.append(data)
+                curdcol.append(data_col)
+                curdrow.append(data_row)
+                curcellcount.append(tile_cell_count)
+                if curgeo is None:
+                    curgeo = geo
+                else:
+                    # merge the georeference of the two datasets, everything remains the same except the origin, which is now the global origin
+                    curgeo = [min([curgeo[0], geo[0]]), curgeo[1], curgeo[2], max([curgeo[3], geo[3]]), curgeo[4], curgeo[5]]
+                    # here we take the greatest dimension currently
+                    curmaxdimension = max((max(curdcol) - min(curdcol) + tile_cell_count) * resolution,
+                                          (max(curdrow) - min(curdrow) + tile_cell_count) * resolution)
+            assert all(curcellcount)  # all the cell counts per tile should be the same for the one resolution
+            finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue, for_gdal)
+            yield curgeo, curmaxdimension, finaldata
 
     def get_layers_by_name(self, layer: Union[str, list] = 'depth', resolution: float = None, nodatavalue: float = np.float32(np.nan),
                            z_positive_up: bool = False):
