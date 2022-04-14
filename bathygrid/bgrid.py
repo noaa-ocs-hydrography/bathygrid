@@ -1419,7 +1419,8 @@ class BathyGrid(BaseGrid):
         grid_parameters
             optional dict of settings to pass to the grid algorithm
         border_data
-            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues
+            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues.  You won't supply it here,
+            this argument will be used during VR gridding, with grids passing subgrids the border data automatically.
         """
 
         if self.grid_algorithm and (self.grid_algorithm != algorithm) and not clear_existing:
