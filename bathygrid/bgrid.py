@@ -833,7 +833,7 @@ class BathyGrid(BaseGrid):
 
         return total_x.ravel(), total_y.ravel()
 
-    def get_tile_neighbors(self, til: Tile):
+    def get_tile_neighbors(self, til: Union[Tile, BaseGrid]):
         """
         Return a list of Tile objects for the neighbors to the provided tile.  Neighbors will be in order of [above, right,
         down, left] in the returned list.
@@ -895,17 +895,37 @@ class BathyGrid(BaseGrid):
         tils = self.get_tile_neighbors(til)
         # up
         if tils[0]:
-            newdata = tils[0].data[tils[0].data['y'] >= (tils[0].max_y - buffer_value)]
-            data.append(newdata)
+            if isinstance(tils[0], Tile):  # single resolution option
+                newdata = tils[0].data[tils[0].data['y'] >= (tils[0].max_y - buffer_value)]
+                data.append(newdata)
+            else:  # for variable resolution, tils will be a list of grids, get all tiles in the grid
+                for subtil in tils[0].tiles.flat:
+                    newdata = subtil.data[subtil.data['y'] >= (subtil.max_y - buffer_value)]
+                    data.append(newdata)
         if tils[1]:
-            newdata = tils[1].data[tils[1].data['x'] <= (tils[1].min_x + buffer_value)]
-            data.append(newdata)
+            if isinstance(tils[1], Tile):  # single resolution option
+                newdata = tils[1].data[tils[1].data['x'] <= (tils[1].min_x + buffer_value)]
+                data.append(newdata)
+            else:
+                for subtil in tils[1].tiles.flat:
+                    newdata = subtil.data[subtil.data['x'] <= (subtil.min_x + buffer_value)]
+                    data.append(newdata)
         if tils[2]:
-            newdata = tils[2].data[tils[2].data['y'] <= (tils[2].min_y + buffer_value)]
-            data.append(newdata)
+            if isinstance(tils[2], Tile):  # single resolution option
+                newdata = tils[2].data[tils[2].data['y'] <= (tils[2].min_y + buffer_value)]
+                data.append(newdata)
+            else:
+                for subtil in tils[2].tiles.flat:
+                    newdata = subtil.data[subtil.data['y'] <= (subtil.min_y + buffer_value)]
+                    data.append(newdata)
         if tils[3]:
-            newdata = tils[3].data[tils[3].data['x'] >= (tils[3].max_x - buffer_value)]
-            data.append(newdata)
+            if isinstance(tils[3], Tile):  # single resolution option
+                newdata = tils[3].data[tils[3].data['x'] >= (tils[3].max_x - buffer_value)]
+                data.append(newdata)
+            else:
+                for subtil in tils[3].tiles.flat:
+                    newdata = subtil.data[subtil.data['x'] >= (subtil.max_x - buffer_value)]
+                    data.append(newdata)
         if data:
             data = np.concatenate(data)
             if not isinstance(data, np.ndarray):
@@ -1190,7 +1210,7 @@ class BathyGrid(BaseGrid):
         return data, [rmin, cmin], [rmax, cmax]
 
     def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: str,
-                      progress_bar: bool = True):
+                      progress_bar: bool = True, border_data: np.ndarray = None):
         """
         Run the gridding without Dask, Tile after Tile.
 
@@ -1211,10 +1231,13 @@ class BathyGrid(BaseGrid):
             support resolution determination
         progress_bar
             if True, display a progress bar
+        border_data
+            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues
         """
 
         if progress_bar:
             print_progress_bar(0, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
+        grid_border_data = border_data  # this is a vr thing, will include border data from neighboring grids as well.
         for cnt, tile in enumerate(self.tiles.flat):
             if progress_bar:
                 print_progress_bar(cnt + 1, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
@@ -1226,16 +1249,21 @@ class BathyGrid(BaseGrid):
                             if rz not in self.resolutions:
                                 self.resolutions.append(rz)
                         continue
-                if isinstance(tile, Tile) and algorithm == 'cube':
+                if algorithm == 'cube':
                     if auto_resolution:
                         border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
                     else:
                         border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
+                    if grid_border_data is not None:
+                        if border_data is not None:
+                            border_data = np.concatenate([border_data, grid_border_data])
+                        else:
+                            border_data = grid_border_data
                 else:
                     border_data = None
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                                    grid_parameters=self.grid_parameters)
+                                    grid_parameters=self.grid_parameters, border_data=border_data)
                 elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
                                     grid_parameters=self.grid_parameters, border_data=border_data)
@@ -1284,7 +1312,7 @@ class BathyGrid(BaseGrid):
         results = None
 
     def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: str,
-                       progress_bar: bool = True):
+                       progress_bar: bool = True, border_data: np.ndarray = None):
         """
         Use Dask to submit the tiles in parallel to the cluster for processing.  Probably should think up a more
         intelligent way to do this than sending around the whole Tile obejct.  That object has a bunch of other stuff
@@ -1307,6 +1335,8 @@ class BathyGrid(BaseGrid):
             support resolution determination
         progress_bar
             if True, display a progress bar
+        border_data
+            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues
         """
 
         if not self.client:
@@ -1320,6 +1350,8 @@ class BathyGrid(BaseGrid):
         data_for_workers = []
         chunk_index = 0
         tile_indices = []
+        grid_border_data = border_data  # this is a vr thing, will include border data from neighboring grids as well.
+
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
                 if regrid_option == 'update' and not clear_existing:
@@ -1332,11 +1364,16 @@ class BathyGrid(BaseGrid):
                 if self.sub_type in ['srtile', 'quadtile']:
                     self._load_tile_data_to_memory(tile)
                 tile_indices.append(cnt)
-                if isinstance(tile, Tile) and algorithm == 'cube':
+                if algorithm == 'cube':
                     if auto_resolution:
                         border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
                     else:
                         border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
+                    if grid_border_data is not None:
+                        if border_data is not None:
+                            border_data = np.concatenate([border_data, grid_border_data])
+                        else:
+                            border_data = grid_border_data
                 else:
                     border_data = None
                 data_for_workers.append([tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, self.name, self.grid_parameters, border_data])
@@ -1355,7 +1392,8 @@ class BathyGrid(BaseGrid):
         self._save_grid()
 
     def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
-             regrid_option: str = 'full', use_dask: bool = False, progress_bar: bool = True, grid_parameters: dict = None):
+             regrid_option: str = 'full', use_dask: bool = False, progress_bar: bool = True, grid_parameters: dict = None,
+             border_data: np.ndarray = None):
         """
         Gridding involves calling 'grid' on all child grids/tiles until you eventually call 'grid' on a Tile.  The Tiles
         are the objects that actually contain the points / gridded data
@@ -1380,6 +1418,8 @@ class BathyGrid(BaseGrid):
             if True, display a progress bar
         grid_parameters
             optional dict of settings to pass to the grid algorithm
+        border_data
+            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues
         """
 
         if self.grid_algorithm and (self.grid_algorithm != algorithm) and not clear_existing:
@@ -1407,9 +1447,9 @@ class BathyGrid(BaseGrid):
         self.resolutions = []
 
         if use_dask:
-            self._grid_parallel(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar)
+            self._grid_parallel(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar, border_data=border_data)
         else:
-            self._grid_regular(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar)
+            self._grid_regular(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar, border_data=border_data)
         return self.resolutions
 
     def plot(self, layer: str = 'depth', resolution: float = None):
@@ -1819,7 +1859,7 @@ def _gridding_parallel(data_blob: list):
 
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters)
+                        grid_parameters=grid_parameters, border_data=border_data)
     elif isinstance(tile, SRTile) and auto_resolution and grid_name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
                         grid_parameters=grid_parameters, border_data=border_data)
