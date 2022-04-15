@@ -1267,12 +1267,9 @@ class BathyGrid(BaseGrid):
                 elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
                                     grid_parameters=self.grid_parameters, border_data=border_data)
-                elif isinstance(tile, Tile):  # make sure that the tile gets the border_data
-                    rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                                    grid_parameters=self.grid_parameters, border_data=border_data)
                 else:
                     rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                                    grid_parameters=self.grid_parameters)
+                                    grid_parameters=self.grid_parameters, border_data=border_data)
                 if isinstance(rez, float) or isinstance(rez, int):
                     rez = [rez]
                 for rz in rez:
@@ -1864,12 +1861,9 @@ def _gridding_parallel(data_blob: list):
     elif isinstance(tile, SRTile) and auto_resolution and grid_name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
                         grid_parameters=grid_parameters, border_data=border_data)
-    elif isinstance(tile, Tile):  # make sure that the tile gets the border_data
-        rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters, border_data=border_data)
     else:
         rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters)
+                        grid_parameters=grid_parameters, border_data=border_data)
     return rez, tile
 
 
