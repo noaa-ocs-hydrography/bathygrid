@@ -1115,6 +1115,8 @@ class BathyGrid(BaseGrid):
                     # here we take the greatest dimension currently
                     curmaxdimension = max((max(curdcol) - min(curdcol) + tile_cell_count) * resolution,
                                           (max(curdrow) - min(curdrow) + tile_cell_count) * resolution)
+            if all([d == {} for d in curdata]):  # skipping empty chunk, happens with VR where the tile has no data at this resolution
+                continue
             assert all(curcellcount)  # all the cell counts per tile should be the same for the one resolution
             finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue, for_gdal)
             yield curgeo, curmaxdimension, finaldata
@@ -2103,7 +2105,7 @@ class OperationalGrid(BathyGrid):
             super().load(self.output_folder)
 
     def export(self, output_path: str, export_format: str = 'csv', z_positive_up: bool = True, resolution: float = None,
-               **kwargs):
+               override_maximum_chunk_dimension: float = None, **kwargs):
         """
         Export the node data to one of the supported formats
 
@@ -2117,6 +2119,10 @@ class OperationalGrid(BathyGrid):
             if True, will output bands with positive up convention
         resolution
             if provided, will only export the given resolution
+        override_maximum_chunk_dimension
+            The width/height of the exported chunk.  Regions larger than this will be exported into multiple files.
+            by default, we use the grid_variables.maximum_chunk_dimension, use this optional argument if you want to
+            override this value.
         """
 
         fmt = export_format.lower()
@@ -2129,11 +2135,11 @@ class OperationalGrid(BathyGrid):
         if fmt == 'csv':
             self._export_csv(output_path, z_positive_up=z_positive_up, resolution=resolution)
         elif fmt == 'geotiff':
-            self._export_geotiff(output_path, z_positive_up=z_positive_up, resolution=resolution)
+            self._export_geotiff(output_path, z_positive_up=z_positive_up, resolution=resolution, override_maximum_chunk_dimension=override_maximum_chunk_dimension)
         elif fmt == 'bag':
             if self.is_backscatter:
                 raise ValueError('Bathygrid: Cannot generate BAG with Backscatter grid')
-            self._export_bag(output_path, resolution=resolution, **kwargs)
+            self._export_bag(output_path, resolution=resolution, override_maximum_chunk_dimension=override_maximum_chunk_dimension, **kwargs)
         else:
             raise ValueError("bathygrid: Unrecognized format {}, must be one of ['csv', 'geotiff', 'bag']".format(fmt))
 
@@ -2180,7 +2186,7 @@ class OperationalGrid(BathyGrid):
                        fmt=dfmt, delimiter=' ', comments='',
                        header=' '.join([nm for nm in dnames]))
 
-    def _export_geotiff(self, filepath: str, z_positive_up: bool = True, resolution: float = None):
+    def _export_geotiff(self, filepath: str, z_positive_up: bool = True, resolution: float = None, override_maximum_chunk_dimension: float = None):
         """
         Export a GDAL generated geotiff to the provided filepath
 
@@ -2192,6 +2198,9 @@ class OperationalGrid(BathyGrid):
             if True, will output bands with positive up convention
         resolution
             if provided, will only export the given resolution
+        override_maximum_chunk_dimension
+            by default, we use the grid_variables.maximum_chunk_dimension, use this optional argument if you want to
+            override this value
         """
 
         lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
@@ -2211,14 +2220,14 @@ class OperationalGrid(BathyGrid):
             finalnames[finalnames.index('Depth')] = 'Elevation'
         for res in resolutions:
             chunk_count = 1
-            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
+            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames, override_maximum_chunk_dimension=override_maximum_chunk_dimension,
                                                                         nodatavalue=nodatavalue, z_positive_up=z_positive_up):
                 resfile = basefile + '_{}_{}.tif'.format(res, chunk_count)
                 data = list(data.values())
                 gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=finalnames, driver='GTiff')
                 chunk_count += 1
 
-    def _export_bag(self, filepath: str, resolution: float = None, individual_name: str = 'unknown',
+    def _export_bag(self, filepath: str, resolution: float = None, override_maximum_chunk_dimension: float = None, individual_name: str = 'unknown',
                     organizational_name: str = 'unknown', position_name: str = 'unknown', attr_date: str = '',
                     vert_crs: str = '', abstract: str = '', process_step_description: str = '', attr_datetime: str = '',
                     restriction_code: str = 'otherRestrictions', other_constraints: str = 'unknown',
@@ -2236,6 +2245,9 @@ class OperationalGrid(BathyGrid):
             folder to contain the exported data
         resolution
             if provided, will only export the given resolution
+        override_maximum_chunk_dimension
+            by default, we use the grid_variables.maximum_chunk_dimension, use this optional argument if you want to
+            override this value
         """
 
         if not attr_date:
@@ -2269,7 +2281,7 @@ class OperationalGrid(BathyGrid):
             finalnames[finalnames.index('Depth')] = 'Elevation'
         for res in resolutions:
             chunk_count = 1
-            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
+            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames, override_maximum_chunk_dimension=override_maximum_chunk_dimension,
                                                                         nodatavalue=nodatavalue, z_positive_up=z_positive_up):
                 resfile = basefile + '_{}_{}.bag'.format(res, chunk_count)
                 data = list(data.values())
