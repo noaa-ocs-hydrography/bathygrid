@@ -62,10 +62,13 @@ class BathyGrid(BaseGrid):
     def __repr__(self):
         output = 'Bathygrid Version: {}\n'.format(self.version)
         output += 'Resolutions (meters): {}\n'.format(self.resolutions)
-        output += 'Containers: {}\n'.format('\n'.join(list(self.container.keys())))
+        # get unique entries in container list, which have chunk indexes attached like so ['tj_patch_0', 'tj_patch_1', 'tj_patch_11']
+        output += 'Containers:\n'
+        for uk in self.unique_container_entries:
+            output += ' - {}\n'.format(uk)
         output += 'Backscatter Mosaic: {}\n'.format(self.is_backscatter)
         if not self.is_backscatter:
-            output += 'Mean Depth: {}\n'.format(self.mean_depth)
+            output += 'Mean Depth: {}\n'.format(round(self.mean_depth, 3))
         else:
             output += 'Mean Intensity: {}\n'.format(self.mean_depth)
         try:
@@ -853,7 +856,10 @@ class BathyGrid(BaseGrid):
         tils = []
         # up
         try:
-            tils.append(self.tiles[til_row - 1, til_column][0])
+            if til_row - 1 < 0:  # using -1 as an index will work of course, but not in the way you want...
+                tils.append(None)
+            else:
+                tils.append(self.tiles[til_row - 1, til_column][0])
         except:
             tils.append(None)
         # right
@@ -868,7 +874,10 @@ class BathyGrid(BaseGrid):
             tils.append(None)
         # left
         try:
-            tils.append(self.tiles[til_row, til_column - 1][0])
+            if til_column - 1 < 0:  # using -1 as an index will work of course, but not in the way you want...
+                tils.append(None)
+            else:
+                tils.append(self.tiles[til_row, til_column - 1][0])
         except:
             tils.append(None)
         return tils
@@ -902,6 +911,7 @@ class BathyGrid(BaseGrid):
                 for subtil in tils[0].tiles.flat:
                     newdata = subtil.data[subtil.data['y'] >= (subtil.max_y - buffer_value)]
                     data.append(newdata)
+        # right
         if tils[1]:
             if isinstance(tils[1], Tile):  # single resolution option
                 newdata = tils[1].data[tils[1].data['x'] <= (tils[1].min_x + buffer_value)]
@@ -910,6 +920,7 @@ class BathyGrid(BaseGrid):
                 for subtil in tils[1].tiles.flat:
                     newdata = subtil.data[subtil.data['x'] <= (subtil.min_x + buffer_value)]
                     data.append(newdata)
+        # down
         if tils[2]:
             if isinstance(tils[2], Tile):  # single resolution option
                 newdata = tils[2].data[tils[2].data['y'] <= (tils[2].min_y + buffer_value)]
@@ -918,6 +929,7 @@ class BathyGrid(BaseGrid):
                 for subtil in tils[2].tiles.flat:
                     newdata = subtil.data[subtil.data['y'] <= (subtil.min_y + buffer_value)]
                     data.append(newdata)
+        # left
         if tils[3]:
             if isinstance(tils[3], Tile):  # single resolution option
                 newdata = tils[3].data[tils[3].data['x'] >= (tils[3].max_x - buffer_value)]
@@ -1252,10 +1264,7 @@ class BathyGrid(BaseGrid):
                                 self.resolutions.append(rz)
                         continue
                 if algorithm == 'cube':
-                    if auto_resolution:
-                        border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
-                    else:
-                        border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
+                    border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
                     if grid_border_data is not None:
                         if border_data is not None:
                             border_data = np.concatenate([border_data, grid_border_data])
