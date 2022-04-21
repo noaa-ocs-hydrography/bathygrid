@@ -90,8 +90,11 @@ def create_folder(output_directory: str, fldrname: str):
         fldr_path = os.path.join(output_directory, fldrname)
         os.mkdir(fldr_path)
     except FileExistsError:
-        fldr_path = os.path.join(output_directory, fldrname + '_{}'.format(tstmp))
-        os.mkdir(fldr_path)
+        if not os.listdir(os.path.join(output_directory, fldrname)):  # if the folder is empty, we can still use it
+            fldr_path = os.path.join(output_directory, fldrname)
+        else:
+            fldr_path = os.path.join(output_directory, fldrname + '_{}'.format(tstmp))
+            os.mkdir(fldr_path)
     return fldr_path
 
 

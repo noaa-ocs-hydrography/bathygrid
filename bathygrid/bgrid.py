@@ -62,10 +62,13 @@ class BathyGrid(BaseGrid):
     def __repr__(self):
         output = 'Bathygrid Version: {}\n'.format(self.version)
         output += 'Resolutions (meters): {}\n'.format(self.resolutions)
-        output += 'Containers: {}\n'.format('\n'.join(list(self.container.keys())))
+        # get unique entries in container list, which have chunk indexes attached like so ['tj_patch_0', 'tj_patch_1', 'tj_patch_11']
+        output += 'Containers:\n'
+        for uk in self.unique_container_entries:
+            output += ' - {}\n'.format(uk)
         output += 'Backscatter Mosaic: {}\n'.format(self.is_backscatter)
         if not self.is_backscatter:
-            output += 'Mean Depth: {}\n'.format(self.mean_depth)
+            output += 'Mean Depth: {}\n'.format(round(self.mean_depth, 3))
         else:
             output += 'Mean Intensity: {}\n'.format(self.mean_depth)
         try:
@@ -266,6 +269,15 @@ class BathyGrid(BaseGrid):
                 if tile:
                     if tile.point_count_changed:
                         return True
+        return False
+
+    @property
+    def positive_up(self):
+        if self.vertical_reference:
+            if self.vertical_reference.find('height (h)",up') > -1:
+                return True
+            else:
+                return False
         return False
 
     def get_geotransform(self, resolution: float):
@@ -721,20 +733,71 @@ class BathyGrid(BaseGrid):
             layer = [layer]
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
-                col, row = self._tile_idx_to_row_col(cnt)
-                tile_cell_count = self.tile_size / resolution
-                assert tile_cell_count.is_integer()
-                tile_cell_count = int(tile_cell_count)
-                data_col, data_row = col * tile_cell_count, row * tile_cell_count
-                geo = tile.get_geotransform(resolution)
-                data = {}
-                for cnt, lyr in enumerate(layer):
-                    newdata = tile.get_layers_by_name(lyr, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
-                    if newdata is not None:
-                        if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
-                            newdata = newdata[0]
-                        data[lyr] = newdata
+                row, col = self._tile_idx_to_row_col(cnt)
+                tile, data, geo, data_col, data_row, tile_cell_count = self.get_tile_data(row, col, resolution, layer, nodatavalue, z_positive_up)
                 yield geo, data_col, data_row, tile_cell_count, data
+
+    def get_tile_data(self, row_number: int, column_number: int, resolution: float, layer: Union[str, list] = 'depth',
+                      nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False):
+        """
+        Get the data and relevant information for the tile at the provided row/column number.  If the tile is a subgrid
+        (vr grids have grids as tiles), this will return the data for that subgrid.
+
+        You should use this method to access a tile, will also allow you to alter the z sign convention.
+
+        Parameters
+        ----------
+        row_number
+            row number of the desired tile
+        column_number
+            column number of the desired tile
+        resolution
+            resolution of the layer we want to access, if not provided will use the first resolution found, will error if there is
+            more than one resolution in the grid
+        layer
+            string identifier for the layer(s) to access, valid layers include 'depth', 'intensity', 'vertical_uncertainty', 'horizontal_uncertainty', 'total_uncertainty',
+            'hypothesis_ratio
+        nodatavalue
+            nodatavalue to set in the regular grid
+        z_positive_up
+            if True, will output bands with positive up convention
+
+        Returns
+        -------
+        Union[Tile,BathyGrid]
+            Tile or Grid at the given row column index
+        dict
+            tile layer data for the given resolution
+        list
+            [x origin, x pixel size, x rotation, y origin, y rotation, -y pixel size] for the given tile
+        int
+            column index in terms of cell count
+        int
+            row index in terms of cell count
+        int
+            width of the tile in number of cells
+        """
+
+        if self.positive_up:
+            if z_positive_up:  # this is already positive up/height, so switch this off
+                z_positive_up = False
+            else:  # this is a positive up/height, so switch this on to flip the z convention of the returned data
+                z_positive_up = True
+
+        tile = self.tiles[row_number, column_number]
+        tile_cell_count = self.tile_size / resolution
+        assert tile_cell_count.is_integer()
+        tile_cell_count = int(tile_cell_count)
+        data_col, data_row = row_number * tile_cell_count, column_number * tile_cell_count
+        geo = tile.get_geotransform(resolution)
+        data = {}
+        for cnt, lyr in enumerate(layer):
+            newdata = tile.get_layers_by_name(lyr, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
+            if newdata is not None:
+                if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
+                    newdata = newdata[0]
+                data[lyr] = newdata
+        return tile, data, geo, data_col, data_row, tile_cell_count
 
     def get_tile_boundaries(self):
         """
@@ -773,7 +836,7 @@ class BathyGrid(BaseGrid):
 
         return total_x.ravel(), total_y.ravel()
 
-    def get_tile_neighbors(self, til: Tile):
+    def get_tile_neighbors(self, til: Union[Tile, BaseGrid]):
         """
         Return a list of Tile objects for the neighbors to the provided tile.  Neighbors will be in order of [above, right,
         down, left] in the returned list.
@@ -793,7 +856,10 @@ class BathyGrid(BaseGrid):
         tils = []
         # up
         try:
-            tils.append(self.tiles[til_row - 1, til_column][0])
+            if til_row - 1 < 0:  # using -1 as an index will work of course, but not in the way you want...
+                tils.append(None)
+            else:
+                tils.append(self.tiles[til_row - 1, til_column][0])
         except:
             tils.append(None)
         # right
@@ -808,7 +874,10 @@ class BathyGrid(BaseGrid):
             tils.append(None)
         # left
         try:
-            tils.append(self.tiles[til_row, til_column - 1][0])
+            if til_column - 1 < 0:  # using -1 as an index will work of course, but not in the way you want...
+                tils.append(None)
+            else:
+                tils.append(self.tiles[til_row, til_column - 1][0])
         except:
             tils.append(None)
         return tils
@@ -835,17 +904,40 @@ class BathyGrid(BaseGrid):
         tils = self.get_tile_neighbors(til)
         # up
         if tils[0]:
-            newdata = tils[0].data[tils[0].data['y'] >= (tils[0].max_y - buffer_value)]
-            data.append(newdata)
+            if isinstance(tils[0], Tile):  # single resolution option
+                newdata = tils[0].data[tils[0].data['y'] >= (tils[0].max_y - buffer_value)]
+                data.append(newdata)
+            else:  # for variable resolution, tils will be a list of grids, get all tiles in the grid
+                for subtil in tils[0].tiles.flat:
+                    newdata = subtil.data[subtil.data['y'] >= (subtil.max_y - buffer_value)]
+                    data.append(newdata)
+        # right
         if tils[1]:
-            newdata = tils[1].data[tils[1].data['x'] <= (tils[1].min_x + buffer_value)]
-            data.append(newdata)
+            if isinstance(tils[1], Tile):  # single resolution option
+                newdata = tils[1].data[tils[1].data['x'] <= (tils[1].min_x + buffer_value)]
+                data.append(newdata)
+            else:
+                for subtil in tils[1].tiles.flat:
+                    newdata = subtil.data[subtil.data['x'] <= (subtil.min_x + buffer_value)]
+                    data.append(newdata)
+        # down
         if tils[2]:
-            newdata = tils[2].data[tils[2].data['y'] <= (tils[2].min_y + buffer_value)]
-            data.append(newdata)
+            if isinstance(tils[2], Tile):  # single resolution option
+                newdata = tils[2].data[tils[2].data['y'] <= (tils[2].min_y + buffer_value)]
+                data.append(newdata)
+            else:
+                for subtil in tils[2].tiles.flat:
+                    newdata = subtil.data[subtil.data['y'] <= (subtil.min_y + buffer_value)]
+                    data.append(newdata)
+        # left
         if tils[3]:
-            newdata = tils[3].data[tils[3].data['x'] >= (tils[3].max_x - buffer_value)]
-            data.append(newdata)
+            if isinstance(tils[3], Tile):  # single resolution option
+                newdata = tils[3].data[tils[3].data['x'] >= (tils[3].max_x - buffer_value)]
+                data.append(newdata)
+            else:
+                for subtil in tils[3].tiles.flat:
+                    newdata = subtil.data[subtil.data['x'] >= (subtil.max_x - buffer_value)]
+                    data.append(newdata)
         if data:
             data = np.concatenate(data)
             if not isinstance(data, np.ndarray):
@@ -906,6 +998,78 @@ class BathyGrid(BaseGrid):
                 finaldata[lyr] = np.fliplr(finaldata[lyr].T)
         return finaldata
 
+    def _split_to_approx_shape(self, arr: np.ndarray, chunk_shape: tuple):
+        """
+        Take a 2d array and split it up into chunk_shape sized chunks.  We then return the != None values in the array
+        to get the list of lists of values.
+
+        Parameters
+        ----------
+        arr
+            2d array
+        chunk_shape
+            size of the desired chunk, (row_dimension, column_dimension)
+
+        Returns
+        -------
+        list
+            list of lists of the values in each non-None cell
+        """
+
+        if arr.ndim != 2 or len(chunk_shape) != 2:
+            raise NotImplementedError('_split_to_approx_shape: assumes two dimensions')
+
+        if chunk_shape >= arr.shape:
+            valid = arr != None
+            if valid.any():
+                return [arr[valid].tolist()]
+            else:
+                return []
+
+        num_sections = int(np.ceil(arr.shape[0] / chunk_shape[0]))
+        row_split = np.array_split(arr, num_sections, axis=0)
+        num_col_sections = int(np.ceil(row_split[0].shape[1] / chunk_shape[1]))
+
+        chnks = []
+        for split_a in row_split:
+            col_split = np.array_split(split_a, num_col_sections, axis=1)
+            for split_b in col_split:
+                valid = split_b != None
+                if valid.any():
+                    chnks.append(split_b[valid].tolist())
+        return chnks
+
+    def _tile_chunk_indices(self, max_chunk_dimension: float = None):
+        """
+        In order to return chunks of tiles in get_chunks_of_tiles, we need to figure out the tile indices of the tiles
+        that are in each chunk.  We take a max chunk dimension, split our grid into chunks of grids, and return a list of
+        the row,column indices for each real tile in that grid.
+
+        Parameters
+        ----------
+        max_chunk_dimension
+            size of the chunk, used for both dimensions, i.e. maxchunkdimension=2, chunk shape = (2,2)
+
+        Returns
+        -------
+        list
+            list of lists of row column indices for each real tile in each chunk
+        """
+
+        # ensure we get at least one tile, but pick the number of tiles that gets us less than or equal to max_chunk_dimension
+        max_length = max(int(np.floor(max_chunk_dimension / self.tile_size)), 1)
+        chunk_shape = (max_length, max_length)
+
+        tindex = np.full_like(self.tiles, None)
+        tloc = np.where(self.tiles != None)
+        tindex[tloc] = np.column_stack(tloc).tolist()
+
+        tile_rows, tile_columns = tloc
+        min_tile_row, min_tile_column = min(tile_rows), min(tile_columns)
+        max_tile_row, max_tile_column = max(tile_rows), max(tile_columns)
+        tindex = tindex[min_tile_row:max_tile_row + 1, min_tile_column:max_tile_column + 1]
+        return self._split_to_approx_shape(tindex, chunk_shape)
+
     def get_chunks_of_tiles(self, resolution: float = None, layer: Union[str, list] = 'depth',
                             nodatavalue: float = np.float32(np.nan), z_positive_up: bool = False,
                             override_maximum_chunk_dimension: float = None, for_gdal: bool = True):
@@ -938,41 +1102,36 @@ class BathyGrid(BaseGrid):
         if isinstance(layer, str):
             layer = [layer]
         if override_maximum_chunk_dimension:
-            max_width = override_maximum_chunk_dimension
+            max_dimension = override_maximum_chunk_dimension
         else:
-            max_width = maximum_chunk_dimension
-        curmaxdimension = 0
-        curgeo = None
-        curdata = []
-        curdcol = []
-        curdrow = []
-        curcellcount = []
-        for geo, data_col, data_row, tile_cell_count, tdata in self.get_tiles_by_resolution(resolution, layer,
-                                                                                            nodatavalue=nodatavalue, z_positive_up=z_positive_up):
-            if curmaxdimension >= max_width:
-                assert all(curcellcount)  # all the tile counts per tile should be the same for the one resolution
-                finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue, for_gdal)
-                yield curgeo, curmaxdimension, finaldata
-                curgeo = None
-                curdata = []
-                curdcol = []
-                curdrow = []
-                curcellcount = []
-
-            curdata.append(tdata)
-            curdcol.append(data_col)
-            curdrow.append(data_row)
-            curcellcount.append(tile_cell_count)
-            if curgeo is None:
-                curgeo = geo
-            else:
-                # merge the georeference of the two datasets, everything remains the same except the origin, which is now the global origin
-                curgeo = [min([curgeo[0], geo[0]]), curgeo[1], curgeo[2], max([curgeo[3], geo[3]]), curgeo[4], curgeo[5]]
-            # here we take the greatest dimension currently to see if we are big enough to stop the chunk
-            curmaxdimension = max((max(curdcol) - min(curdcol) + tile_cell_count) * resolution, (max(curdrow) - min(curdrow) + tile_cell_count) * resolution)
-        assert all(curcellcount)  # all the cell counts per tile should be the same for the one resolution
-        finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue)
-        yield curgeo, curmaxdimension, finaldata
+            max_dimension = maximum_chunk_dimension
+        tile_indices = self._tile_chunk_indices(max_dimension)
+        for index_list in tile_indices:
+            curgeo = None
+            curdata = []
+            curdcol = []
+            curdrow = []
+            curcellcount = []
+            curmaxdimension = 0
+            for trow, tcol in index_list:
+                tile, data, geo, data_col, data_row, tile_cell_count = self.get_tile_data(trow, tcol, resolution, layer, nodatavalue, z_positive_up)
+                curdata.append(data)
+                curdcol.append(data_col)
+                curdrow.append(data_row)
+                curcellcount.append(tile_cell_count)
+                if curgeo is None:
+                    curgeo = geo
+                else:
+                    # merge the georeference of the two datasets, everything remains the same except the origin, which is now the global origin
+                    curgeo = [min([curgeo[0], geo[0]]), curgeo[1], curgeo[2], max([curgeo[3], geo[3]]), curgeo[4], curgeo[5]]
+                    # here we take the greatest dimension currently
+                    curmaxdimension = max((max(curdcol) - min(curdcol) + tile_cell_count) * resolution,
+                                          (max(curdrow) - min(curdrow) + tile_cell_count) * resolution)
+            if all([d == {} for d in curdata]):  # skipping empty chunk, happens with VR where the tile has no data at this resolution
+                continue
+            assert all(curcellcount)  # all the cell counts per tile should be the same for the one resolution
+            finaldata = self._finalize_chunk(curdcol, curdrow, curcellcount[0], layer, curdata, nodatavalue, for_gdal)
+            yield curgeo, curmaxdimension, finaldata
 
     def get_layers_by_name(self, layer: Union[str, list] = 'depth', resolution: float = None, nodatavalue: float = np.float32(np.nan),
                            z_positive_up: bool = False):
@@ -1011,18 +1170,11 @@ class BathyGrid(BaseGrid):
         data = [self._build_layer_grid(resolution, layername=lyr, nodatavalue=nodatavalue) for lyr in layer]
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
-                col, row = self._tile_idx_to_row_col(cnt)
-                tile_cell_count = self.tile_size / resolution
-                assert tile_cell_count.is_integer()
-                tile_cell_count = int(tile_cell_count)
-                data_col, data_row = col * tile_cell_count, row * tile_cell_count
-                for cnt, lyr in enumerate(layer):
-                    newdata = tile.get_layers_by_name(lyr, resolution, nodatavalue=nodatavalue, z_positive_up=z_positive_up)
-                    if newdata is not None:
-                        if isinstance(newdata, list):  # true if 'tile' is actually a subgrid (BathyGrid)
-                            newdata = newdata[0]
-                        data[cnt][data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = newdata
-                        empty = False
+                row, col = self._tile_idx_to_row_col(cnt)
+                tile, newdata, geo, data_col, data_row, tile_cell_count = self.get_tile_data(row, col, resolution, layer, nodatavalue, z_positive_up)
+                for cnt, lyr in enumerate(newdata.keys()):
+                    data[cnt][data_col:data_col + tile_cell_count, data_row:data_row + tile_cell_count] = newdata[lyr]
+                    empty = False
         if empty:
             data = None
         return data
@@ -1072,7 +1224,7 @@ class BathyGrid(BaseGrid):
         return data, [rmin, cmin], [rmax, cmax]
 
     def _grid_regular(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: str,
-                      progress_bar: bool = True):
+                      progress_bar: bool = True, border_data: np.ndarray = None):
         """
         Run the gridding without Dask, Tile after Tile.
 
@@ -1093,10 +1245,13 @@ class BathyGrid(BaseGrid):
             support resolution determination
         progress_bar
             if True, display a progress bar
+        border_data
+            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues
         """
 
         if progress_bar:
             print_progress_bar(0, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
+        grid_border_data = border_data  # this is a vr thing, will include border data from neighboring grids as well.
         for cnt, tile in enumerate(self.tiles.flat):
             if progress_bar:
                 print_progress_bar(cnt + 1, self.tiles.size, 'Gridding {} - {}:'.format(self.name, algorithm))
@@ -1108,25 +1263,24 @@ class BathyGrid(BaseGrid):
                             if rz not in self.resolutions:
                                 self.resolutions.append(rz)
                         continue
-                if isinstance(tile, Tile) and algorithm == 'cube':
-                    if auto_resolution:
-                        border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
-                    else:
-                        border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
+                if algorithm == 'cube':
+                    border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
+                    if grid_border_data is not None:
+                        if border_data is not None:
+                            border_data = np.concatenate([border_data, grid_border_data])
+                        else:
+                            border_data = grid_border_data
                 else:
                     border_data = None
                 if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                                    grid_parameters=self.grid_parameters)
+                                    grid_parameters=self.grid_parameters, border_data=border_data)
                 elif isinstance(tile, SRTile) and auto_resolution and self.name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
                     rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
                                     grid_parameters=self.grid_parameters, border_data=border_data)
-                elif isinstance(tile, Tile):  # make sure that the tile gets the border_data
-                    rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                                    grid_parameters=self.grid_parameters, border_data=border_data)
                 else:
                     rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                                    grid_parameters=self.grid_parameters)
+                                    grid_parameters=self.grid_parameters, border_data=border_data)
                 if isinstance(rez, float) or isinstance(rez, int):
                     rez = [rez]
                 for rz in rez:
@@ -1166,7 +1320,7 @@ class BathyGrid(BaseGrid):
         results = None
 
     def _grid_parallel(self, algorithm: str, resolution: float, clear_existing: bool, regrid_option: str, auto_resolution: str,
-                       progress_bar: bool = True):
+                       progress_bar: bool = True, border_data: np.ndarray = None):
         """
         Use Dask to submit the tiles in parallel to the cluster for processing.  Probably should think up a more
         intelligent way to do this than sending around the whole Tile obejct.  That object has a bunch of other stuff
@@ -1189,6 +1343,8 @@ class BathyGrid(BaseGrid):
             support resolution determination
         progress_bar
             if True, display a progress bar
+        border_data
+            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues
         """
 
         if not self.client:
@@ -1202,6 +1358,8 @@ class BathyGrid(BaseGrid):
         data_for_workers = []
         chunk_index = 0
         tile_indices = []
+        grid_border_data = border_data  # this is a vr thing, will include border data from neighboring grids as well.
+
         for cnt, tile in enumerate(self.tiles.flat):
             if tile:
                 if regrid_option == 'update' and not clear_existing:
@@ -1214,11 +1372,16 @@ class BathyGrid(BaseGrid):
                 if self.sub_type in ['srtile', 'quadtile']:
                     self._load_tile_data_to_memory(tile)
                 tile_indices.append(cnt)
-                if isinstance(tile, Tile) and algorithm == 'cube':
+                if algorithm == 'cube':
                     if auto_resolution:
                         border_data = self.get_tile_neighbor_points(tile, tile.width / 10)
                     else:
                         border_data = self.get_tile_neighbor_points(tile, min(tile.width / 10, resolution * 3))
+                    if grid_border_data is not None:
+                        if border_data is not None:
+                            border_data = np.concatenate([border_data, grid_border_data])
+                        else:
+                            border_data = grid_border_data
                 else:
                     border_data = None
                 data_for_workers.append([tile, algorithm, resolution, clear_existing, regrid_option, auto_resolution, self.name, self.grid_parameters, border_data])
@@ -1237,7 +1400,8 @@ class BathyGrid(BaseGrid):
         self._save_grid()
 
     def grid(self, algorithm: str = 'mean', resolution: float = None, clear_existing: bool = False, auto_resolution_mode: str = 'depth',
-             regrid_option: str = 'full', use_dask: bool = False, progress_bar: bool = True, grid_parameters: dict = None):
+             regrid_option: str = 'full', use_dask: bool = False, progress_bar: bool = True, grid_parameters: dict = None,
+             border_data: np.ndarray = None):
         """
         Gridding involves calling 'grid' on all child grids/tiles until you eventually call 'grid' on a Tile.  The Tiles
         are the objects that actually contain the points / gridded data
@@ -1262,6 +1426,9 @@ class BathyGrid(BaseGrid):
             if True, display a progress bar
         grid_parameters
             optional dict of settings to pass to the grid algorithm
+        border_data
+            point data that falls on the borders, used in the CUBE algorithm to handle tile edge issues.  You won't supply it here,
+            this argument will be used during VR gridding, with grids passing subgrids the border data automatically.
         """
 
         if self.grid_algorithm and (self.grid_algorithm != algorithm) and not clear_existing:
@@ -1289,9 +1456,9 @@ class BathyGrid(BaseGrid):
         self.resolutions = []
 
         if use_dask:
-            self._grid_parallel(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar)
+            self._grid_parallel(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar, border_data=border_data)
         else:
-            self._grid_regular(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar)
+            self._grid_regular(algorithm, resolution, clear_existing, regrid_option, auto_resolution=auto_resolution, progress_bar=progress_bar, border_data=border_data)
         return self.resolutions
 
     def plot(self, layer: str = 'depth', resolution: float = None):
@@ -1701,16 +1868,13 @@ def _gridding_parallel(data_blob: list):
 
     if isinstance(tile, BathyGrid) and auto_resolution:  # vrgrid subgrids can calc their own resolution
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters)
+                        grid_parameters=grid_parameters, border_data=border_data)
     elif isinstance(tile, SRTile) and auto_resolution and grid_name not in sr_grid_root_names:  # tiles in vrgridtile can be different resolutions
         rez = tile.grid(algorithm, None, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
                         grid_parameters=grid_parameters, border_data=border_data)
-    elif isinstance(tile, Tile):  # make sure that the tile gets the border_data
-        rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters, border_data=border_data)
     else:
         rez = tile.grid(algorithm, resolution, auto_resolution_mode=auto_resolution, clear_existing=clear_existing, regrid_option=regrid_option, progress_bar=False,
-                        grid_parameters=grid_parameters)
+                        grid_parameters=grid_parameters, border_data=border_data)
     return rez, tile
 
 
@@ -1950,7 +2114,7 @@ class OperationalGrid(BathyGrid):
             super().load(self.output_folder)
 
     def export(self, output_path: str, export_format: str = 'csv', z_positive_up: bool = True, resolution: float = None,
-               **kwargs):
+               override_maximum_chunk_dimension: float = None, **kwargs):
         """
         Export the node data to one of the supported formats
 
@@ -1964,6 +2128,10 @@ class OperationalGrid(BathyGrid):
             if True, will output bands with positive up convention
         resolution
             if provided, will only export the given resolution
+        override_maximum_chunk_dimension
+            The width/height of the exported chunk.  Regions larger than this will be exported into multiple files.
+            by default, we use the grid_variables.maximum_chunk_dimension, use this optional argument if you want to
+            override this value.
         """
 
         fmt = export_format.lower()
@@ -1976,11 +2144,11 @@ class OperationalGrid(BathyGrid):
         if fmt == 'csv':
             self._export_csv(output_path, z_positive_up=z_positive_up, resolution=resolution)
         elif fmt == 'geotiff':
-            self._export_geotiff(output_path, z_positive_up=z_positive_up, resolution=resolution)
+            self._export_geotiff(output_path, z_positive_up=z_positive_up, resolution=resolution, override_maximum_chunk_dimension=override_maximum_chunk_dimension)
         elif fmt == 'bag':
             if self.is_backscatter:
                 raise ValueError('Bathygrid: Cannot generate BAG with Backscatter grid')
-            self._export_bag(output_path, resolution=resolution, **kwargs)
+            self._export_bag(output_path, resolution=resolution, override_maximum_chunk_dimension=override_maximum_chunk_dimension, **kwargs)
         else:
             raise ValueError("bathygrid: Unrecognized format {}, must be one of ['csv', 'geotiff', 'bag']".format(fmt))
 
@@ -2013,7 +2181,8 @@ class OperationalGrid(BathyGrid):
             dfmt = ['%.3f', '%.3f']
             for cnt, lname in enumerate(lyrs):
                 if lname == 'depth' and z_positive_up:
-                    lyrdata[cnt] = lyrdata[cnt] * -1
+                    if self.mean_depth > 0:  # currently positive down
+                        lyrdata[cnt] = lyrdata[cnt] * -1
                     lname = 'elevation'
                 dataset += [lyrdata[cnt].ravel()]
                 dnames += [lname]
@@ -2026,7 +2195,7 @@ class OperationalGrid(BathyGrid):
                        fmt=dfmt, delimiter=' ', comments='',
                        header=' '.join([nm for nm in dnames]))
 
-    def _export_geotiff(self, filepath: str, z_positive_up: bool = True, resolution: float = None):
+    def _export_geotiff(self, filepath: str, z_positive_up: bool = True, resolution: float = None, override_maximum_chunk_dimension: float = None):
         """
         Export a GDAL generated geotiff to the provided filepath
 
@@ -2038,6 +2207,9 @@ class OperationalGrid(BathyGrid):
             if True, will output bands with positive up convention
         resolution
             if provided, will only export the given resolution
+        override_maximum_chunk_dimension
+            by default, we use the grid_variables.maximum_chunk_dimension, use this optional argument if you want to
+            override this value
         """
 
         lyrtranslator = {'depth': 'Depth', 'density': 'Density', 'elevation': 'Elevation', 'vertical_uncertainty': 'Vertical Uncertainty',
@@ -2057,14 +2229,14 @@ class OperationalGrid(BathyGrid):
             finalnames[finalnames.index('Depth')] = 'Elevation'
         for res in resolutions:
             chunk_count = 1
-            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
+            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames, override_maximum_chunk_dimension=override_maximum_chunk_dimension,
                                                                         nodatavalue=nodatavalue, z_positive_up=z_positive_up):
                 resfile = basefile + '_{}_{}.tif'.format(res, chunk_count)
                 data = list(data.values())
                 gdal_raster_create(resfile, data, geo_transform, self.epsg, nodatavalue=nodatavalue, bandnames=finalnames, driver='GTiff')
                 chunk_count += 1
 
-    def _export_bag(self, filepath: str, resolution: float = None, individual_name: str = 'unknown',
+    def _export_bag(self, filepath: str, resolution: float = None, override_maximum_chunk_dimension: float = None, individual_name: str = 'unknown',
                     organizational_name: str = 'unknown', position_name: str = 'unknown', attr_date: str = '',
                     vert_crs: str = '', abstract: str = '', process_step_description: str = '', attr_datetime: str = '',
                     restriction_code: str = 'otherRestrictions', other_constraints: str = 'unknown',
@@ -2082,6 +2254,9 @@ class OperationalGrid(BathyGrid):
             folder to contain the exported data
         resolution
             if provided, will only export the given resolution
+        override_maximum_chunk_dimension
+            by default, we use the grid_variables.maximum_chunk_dimension, use this optional argument if you want to
+            override this value
         """
 
         if not attr_date:
@@ -2115,7 +2290,7 @@ class OperationalGrid(BathyGrid):
             finalnames[finalnames.index('Depth')] = 'Elevation'
         for res in resolutions:
             chunk_count = 1
-            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames,
+            for geo_transform, maxdim, data in self.get_chunks_of_tiles(resolution=res, layer=layernames, override_maximum_chunk_dimension=override_maximum_chunk_dimension,
                                                                         nodatavalue=nodatavalue, z_positive_up=z_positive_up):
                 resfile = basefile + '_{}_{}.bag'.format(res, chunk_count)
                 data = list(data.values())

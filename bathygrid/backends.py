@@ -543,10 +543,10 @@ class ZarrGrid(BaseStorage):
     def _save_array(self, arr_path: str, arr: np.ndarray):
         remove_with_permissionserror(arr_path)
         data = self._zarrgrid_todask(arr)
-        if isinstance(data, str):
-            if data != 'empty':
+        if isinstance(data, str) or (isinstance(data, da.Array) and data.size == 0):
+            if isinstance(data, str) and data != 'empty':
                 raise ValueError(f'Bathygrid zarr backend received str data for "empty" workflow, but str was {data}')
-            os.makedirs(arr_path)
+            os.makedirs(arr_path, exist_ok=True)
             open(os.path.join(arr_path, 'zarr_backend_empty'), 'wb').close()
         else:
             da.to_zarr(data, arr_path)
