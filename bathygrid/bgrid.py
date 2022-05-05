@@ -1563,6 +1563,25 @@ class BathyGrid(BaseGrid):
         else:
             print('Vertical Uncertainty not found')
 
+    def plot_total_uncertainty_histogram(self, number_of_bins: int = 50):
+        """
+        Build histogram plot of the vertical uncertainty across all tiles in the grid
+
+        Parameters
+        ----------
+        number_of_bins
+            number of bins to use in the histogram
+        """
+
+        if 'total_uncertainty' in self.layer_names:
+            tunc = self.return_layer_values('total_uncertainty')
+            plt.hist(tunc, number_of_bins)
+            plt.xlabel('Total Uncertainty (2 sigma, meters)')
+            plt.ylabel('Number of Cells')
+            plt.title(f'Total Uncertainty Histogram (bins={number_of_bins})')
+        else:
+            print('Total Uncertainty not found')
+
     def plot_horizontal_uncertainty_histogram(self, number_of_bins: int = 50):
         """
         Build histogram plot of the horizontal uncertainty across all tiles in the grid
@@ -1576,7 +1595,7 @@ class BathyGrid(BaseGrid):
         if 'horizontal_uncertainty' in self.layer_names:
             hunc = self.return_layer_values('horizontal_uncertainty')
             plt.hist(hunc, number_of_bins)
-            plt.xlabel('Horizontal Uncertainty (meters)')
+            plt.xlabel('Horizontal Uncertainty (2 sigma, meters)')
             plt.ylabel('Number of Cells')
             plt.title(f'Horizontal Uncertainty Histogram (bins={number_of_bins})')
         else:
