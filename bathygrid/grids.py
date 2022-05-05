@@ -71,19 +71,14 @@ class BaseGrid(Grid):
     def unique_container_entries(self):
         """
         Get the unique container entries, assuming you are using Kluster to add points.  Kluster takes a container name
-        like 'EM2040_123_05_23_2017' and adds the data to the bathygrid in chunks that look like EM2040_123_05_23_2017_0,
-        EM2040_123_05_23_2017_1, etc.  Here we just return one 'EM2040_123_05_23_2017' for all chunks, so that you are left
+        like 'EM2040_123_05_23_2017' and adds the data to the bathygrid in chunks that look like EM2040_123_05_23_2017__linename1,
+        EM2040_123_05_23_2017__linename2, etc.  Here we just return one 'EM2040_123_05_23_2017' for all chunks, so that you are left
         with just the unique container entries.
         """
         uentry = []
         for ky in list(self.container.keys()):
             try:
-                trailing_underscore = ky[::-1].find('_')
-                if trailing_underscore == -1:
-                    raise ValueError  # not a tagged entry, just do the normal append
-                for kchar in ky[-trailing_underscore:]:  # tagged entry should only have integers after the last underscore
-                    int(kchar)  # otherwise just do the normal append (you get a ValueError here)
-                new_uentry = ky[:-trailing_underscore - 1]
+                new_uentry, linename = ky.split('__')
                 if new_uentry not in uentry:
                     uentry.append(new_uentry)
             except ValueError:
