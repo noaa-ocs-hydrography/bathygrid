@@ -492,9 +492,8 @@ def test_return_unique_containers():
     bg.add_points(smileyface, 'em2040_123_09_07_2020_1', ['line1', 'line2'], 26917, 'waterline')
     bg.add_points(smileyface, 'sjkof_sdjkfh_skodf', ['line1', 'line2'], 26917, 'waterline')
     bg.add_points(smileyface, 'someother_thing with stuff', ['line1', 'line2'], 26917, 'waterline')
-    bg.add_points(smileyface, 'thiswill_be_messedup_123', ['line1', 'line2'], 26917, 'waterline')
-    assert bg.return_unique_containers() == ['test1', 'em2040_123_09_07_2020', 'sjkof_sdjkfh_skodf',
-                                             'someother_thing with stuff', 'thiswill_be_messedup']
+    assert bg.return_unique_containers() == ['test1', 'em2040_123_09_07_2020_0', 'em2040_123_09_07_2020_1',
+                                             'sjkof_sdjkfh_skodf', 'someother_thing with stuff']
 
 
 def test_return_attribution():
@@ -526,7 +525,8 @@ def test_return_attribution():
     assert attr['resolutions'] == [64.0]
     assert attr['storage_type'] == 'numpy'
     assert attr['source_test1']['multibeam_lines'] == ['line1', 'line2']
-    assert attr['source_em2040_123_09_07_2020']['multibeam_lines'] == ['line1', 'line2']
+    assert attr['source_em2040_123_09_07_2020_0']['multibeam_lines'] == ['line1', 'line2']
+    assert attr['source_em2040_123_09_07_2020_1']['multibeam_lines'] == ['line1', 'line2']
     assert attr['source_someother_thing with stuff']['multibeam_lines'] == ['line1', 'line2']
     assert attr['source_thiswill_be_messedup_123']['multibeam_lines'] == ['line1', 'line2']
     assert attr['minimum_time_utc'] == utc_seconds_to_formatted_string(1625123546)
