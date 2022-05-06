@@ -6,7 +6,9 @@ from dask.distributed import get_client, Client
 from dask.array import Array as darray
 import psutil
 from shutil import rmtree
+import h5py
 import time
+from xml.etree import ElementTree as et
 
 import osgeo
 from osgeo import gdal
@@ -440,3 +442,26 @@ def formatted_string_to_utc_seconds(fmttime: str):
     """
     utctime = int(datetime.strptime(fmttime, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc).timestamp())
     return utctime
+
+
+def return_bag_vertical_wkt(resfile: str):
+    if os.path.exists(resfile):
+        r5 = h5py.File(resfile, 'r+')
+        metadata = r5['BAG_root']['metadata'][:].tobytes().decode().replace("\x00", "")
+        xml_root = et.fromstring(metadata)
+        gmd = '{http://www.isotc211.org/2005/gmd}'
+        gco = '{http://www.isotc211.org/2005/gco}'
+        et.register_namespace('gmd', "http://www.isotc211.org/2005/gmd")
+        et.register_namespace('gco', "http://www.isotc211.org/2005/gco")
+        crs_hierarchy = [gmd + 'referenceSystemInfo', gmd + 'MD_ReferenceSystem', gmd + 'referenceSystemIdentifier',
+                         gmd + 'RS_Identifier', gmd + 'code', gco + 'CharacterString']
+        crs_elem = xml_root.findall("/".join(crs_hierarchy))
+        try:
+            assert len(crs_elem) == 2
+        except AssertionError:
+            raise ValueError(f'return_bag_vertical_wkt: Expected 2 (horizontal and vertical) coordinate systems in the bag, found {len(crs_elem)}')
+        for crs_wkt in crs_elem:
+            crs_wkt_text = crs_wkt.text
+            if CRS.from_wkt(crs_wkt_text).is_vertical:
+                return crs_wkt_text
+        raise ValueError(f'return_bag_vertical_wkt: Unable to find vertical coordinate reference system in BAG.')
