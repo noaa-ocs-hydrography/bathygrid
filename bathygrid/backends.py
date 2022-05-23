@@ -396,6 +396,11 @@ class NumpyGrid(BaseStorage):
         if not only_grid:
             self._save_array(folderpath + '/data', tile.data)
         if not only_points:
+            # save_array will clear out old data, but only if you have the same resolution as your old data.  Do this to ensure all old
+            #  griddata is cleared out
+            for fldr in os.listdir(folderpath):
+                if fldr[:4] == 'cell':
+                    remove_with_permissionserror(os.path.join(folderpath, fldr))
             for resolution in tile.cells.keys():
                 if 'depth' in tile.cells[resolution]:
                     self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
@@ -577,6 +582,11 @@ class ZarrGrid(BaseStorage):
         if not only_grid:
             self._save_array(folderpath + '/data', tile.data)
         if not only_points:
+            # save_array will clear out old data, but only if you have the same resolution as your old data.  Do this to ensure all old
+            #  griddata is cleared out
+            for fldr in os.listdir(folderpath):
+                if fldr[:4] == 'cell':
+                    remove_with_permissionserror(os.path.join(folderpath, fldr))
             for resolution in tile.cells.keys():
                 if 'depth' in tile.cells[resolution]:
                     self._save_array(folderpath + '/cells_{}_depth'.format(resolution), tile.cells[resolution]['depth'])
