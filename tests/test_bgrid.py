@@ -783,3 +783,27 @@ def test_coverage_area():
     bg.grid()
     assert bg.coverage_area_square_meters == 58.0
     assert round(bg.coverage_area_square_nm, 6) == .000017
+
+
+def test_has_uncertainty():
+    bg = SRGridZarr(tile_size=16)  # small tile size just to ensure this works with multiple tiles
+    assert not bg.has_horizontal_uncertainty
+    assert not bg.has_vertical_uncertainty
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert bg.has_horizontal_uncertainty
+    assert bg.has_vertical_uncertainty
+    bg = SRGridZarr(tile_size=16)  # small tile size just to ensure this works with multiple tiles
+    bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.has_horizontal_uncertainty
+    assert not bg.has_vertical_uncertainty
+
+    bg = VRGridTileZarr(tile_size=16, subtile_size=16)
+    assert not bg.has_horizontal_uncertainty
+    assert not bg.has_vertical_uncertainty
+    bg.add_points(realdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert bg.has_horizontal_uncertainty
+    assert bg.has_vertical_uncertainty
+    bg = VRGridTileZarr(tile_size=16, subtile_size=16)
+    bg.add_points(onlyzdata, 'test1', ['line1', 'line2'], 26917, 'waterline')
+    assert not bg.has_horizontal_uncertainty
+    assert not bg.has_vertical_uncertainty

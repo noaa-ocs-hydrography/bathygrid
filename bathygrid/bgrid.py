@@ -128,6 +128,58 @@ class BathyGrid(BaseGrid):
                     return True
 
     @property
+    def has_vertical_uncertainty(self):
+        """
+        Simple check to see if the points added to this bathygrid instance contain vertical uncertainty.
+
+        Returns
+        -------
+        bool
+            True if the BathyGrid instance contains tvu
+        """
+        if self.tiles is None:
+            return False
+
+        for tile in self.tiles.flat:
+            if tile:
+                if isinstance(tile, BathyGrid):
+                    for subtile in tile.tiles.flat:
+                        if subtile:
+                            tile = subtile
+                if tile.data is None:
+                    return False
+                if 'tvu' in tile.data.dtype.names:
+                    return True
+                else:
+                    return False
+
+    @property
+    def has_horizontal_uncertainty(self):
+        """
+        Simple check to see if the points added to this bathygrid instance contain horizontal uncertainty.
+
+        Returns
+        -------
+        bool
+            True if the BathyGrid instance contains thu
+        """
+        if self.tiles is None:
+            return False
+
+        for tile in self.tiles.flat:
+            if tile:
+                if isinstance(tile, BathyGrid):
+                    for subtile in tile.tiles.flat:
+                        if subtile:
+                            tile = subtile
+                if tile.data is None:
+                    return False
+                if 'thu' in tile.data.dtype.names:
+                    return True
+                else:
+                    return False
+
+    @property
     def has_tiles(self):
         """
         BathyGrids can either contain more BathyGrids or contain Tiles with point/gridded data.  This check determines
