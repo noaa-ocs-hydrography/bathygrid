@@ -53,6 +53,25 @@ def _validate_create_options(folder_path: str, grid_type: str, grid_backend: str
     return folderpath
 
 
+def is_bathygrid(folder_path: str):
+    """
+    Quick method to determine if the provided folder is a BathyGrid parent folder.  We simply search the subfolders
+    for a Bathygrid root folder.
+
+    Returns
+    -------
+    bool
+        True if the given folder is a BathyGrid folder
+    """
+
+    if os.path.isdir(folder_path):
+        subfolders = os.listdir(folder_path)
+        for fldr in subfolders:
+            if fldr in allowable_grid_root_names:
+                return True
+    return False
+
+
 def load_grid(folder_path: str):
     """
     Load a saved BathyGrid instance from file.  Folder_path is the container that should contain a root folder within,
