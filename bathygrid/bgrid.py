@@ -367,6 +367,16 @@ class BathyGrid(BaseGrid):
             added data
         """
 
+        if self.epsg and epsg:
+            if self.epsg != int(epsg):
+                raise ValueError('BathyGrid: Found existing coordinate system {}, new coordinate system {} must match'.format(self.epsg,
+                                                                                                                              epsg))
+        if epsg:
+            self.epsg = int(epsg)
+        if self.vertical_reference and (self.vertical_reference != vertical_reference):
+            if not (self.vertical_reference.find('MLLW') != -1 and vertical_reference.find('MLLW') != -1):
+                raise ValueError('BathyGrid: Found existing vertical reference {}, new vertical reference {} must match'.format(self.vertical_reference,
+                                                                                                                                vertical_reference))
         if min_time:
             min_time = int(min_time)
             if self.min_time:
@@ -388,15 +398,6 @@ class BathyGrid(BaseGrid):
             self.container[container_name] = ['Unknown']
         self.container_timestamp[container_name] = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
 
-        if self.epsg and epsg:
-            if self.epsg != int(epsg):
-                raise ValueError('BathyGrid: Found existing coordinate system {}, new coordinate system {} must match'.format(self.epsg,
-                                                                                                                              epsg))
-        if epsg:
-            self.epsg = int(epsg)
-        if self.vertical_reference and (self.vertical_reference != vertical_reference):
-            raise ValueError('BathyGrid: Found existing vertical reference {}, new vertical reference {} must match'.format(self.vertical_reference,
-                                                                                                                            vertical_reference))
         self.vertical_reference = vertical_reference
 
     def _update_mean_depth(self):
