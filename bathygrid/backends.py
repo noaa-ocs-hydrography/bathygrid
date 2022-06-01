@@ -70,7 +70,10 @@ class BaseStorage(OperationalGrid):
                 del data[ky]
                 data[ky] = tmpdata
         for ky in bathygrid_float_to_str:
-            data[ky] = float(data[ky])
+            if data[ky].lower() == 'none':
+                data[ky] = 0.0
+            else:
+                data[ky] = float(data[ky])
         for ky in data:
             self.__setattr__(ky, data[ky])
         self.tiles = np.full(self.tile_x_origin.shape, None, dtype=object)
