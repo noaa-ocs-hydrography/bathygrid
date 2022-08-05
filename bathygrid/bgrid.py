@@ -2293,8 +2293,9 @@ class OperationalGrid(BathyGrid):
         else:
             layernames = [lname for lname in self.layer_names if lname in ['depth', 'vertical_uncertainty', 'total_uncertainty']]
         finalnames = [lyrtranslator[lname] for lname in layernames]
-        if z_positive_up and finalnames.index('Depth') != -1:
-            finalnames[finalnames.index('Depth')] = 'Elevation'
+        if not self.is_backscatter:
+            if z_positive_up and finalnames.index('Depth') != -1:
+                finalnames[finalnames.index('Depth')] = 'Elevation'
 
         for res in resolutions:
             chunk_count = 1
