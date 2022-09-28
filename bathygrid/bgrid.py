@@ -1667,15 +1667,19 @@ class BathyGrid(BaseGrid):
 
         density, depth = self.density_count_vs_depth
         density, depth = np.array(density), np.array(depth)
-        mindepth, maxdepth = min(depth), max(depth)
-        bins = np.linspace(mindepth, maxdepth, number_of_bins + 1)
+        nan_mask = ~np.isnan(depth)
+        depth = depth[nan_mask]
+        density = density[nan_mask]
+
+        mindepth, maxdepth = np.min(depth), np.max(depth)
+        bins = np.linspace(mindepth - 0.001, maxdepth + 0.001, number_of_bins + 1)  # padding for rounding issues
         bin_indices = np.digitize(depth, bins)
         bin_sort = np.argsort(bin_indices)
         unique_indices, uidx, ucounts = np.unique(bin_indices[bin_sort], return_index=True, return_counts=True)
         counts_sum = np.add.reduceat(density[bin_sort], uidx, axis=0)
         counts_mean = counts_sum / ucounts
 
-        plt.plot(bins, counts_mean)
+        plt.plot(bins[unique_indices], counts_mean)
         plt.xlabel('Depth (meters)')
         plt.ylabel('Average Soundings per Cell')
         plt.title(f'Average Density vs Depth (bins={number_of_bins})')
@@ -1687,15 +1691,19 @@ class BathyGrid(BaseGrid):
 
         density, depth = self.density_per_square_meter_vs_depth
         density, depth = np.array(density), np.array(depth)
+        nan_mask = ~np.isnan(depth)
+        depth = depth[nan_mask]
+        density = density[nan_mask]
+
         mindepth, maxdepth = min(depth), max(depth)
-        bins = np.linspace(mindepth, maxdepth, number_of_bins + 1)
+        bins = np.linspace(mindepth - 0.001, maxdepth + 0.001, number_of_bins + 1)  # padding for rounding issues
         bin_indices = np.digitize(depth, bins)
         bin_sort = np.argsort(bin_indices)
         unique_indices, uidx, ucounts = np.unique(bin_indices[bin_sort], return_index=True, return_counts=True)
         dsm_sum = np.add.reduceat(density[bin_sort], uidx, axis=0)
         dsm_mean = dsm_sum / ucounts
 
-        plt.plot(bins, dsm_mean)
+        plt.plot(bins[unique_indices], dsm_mean)
         plt.xlabel('Depth (meters)')
         plt.ylabel('Average Soundings per Square Meter')
         plt.title(f'Average Density vs Depth (bins={number_of_bins})')
